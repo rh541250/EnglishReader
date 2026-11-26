@@ -1,8 +1,13 @@
 import 'package:english_reader/app/app_scope.dart';
 import 'package:english_reader/features/articles/article_card.dart';
+import 'package:english_reader/features/auth/login_page.dart';
+import 'package:english_reader/features/favorites/favorites_page.dart';
+import 'package:english_reader/features/home/home_shell.dart';
 import 'package:english_reader/features/reader/paragraph_view.dart';
 import 'package:english_reader/features/reader/reader_page.dart';
 import 'package:english_reader/features/reader/word_popup.dart';
+import 'package:english_reader/features/search/search_bar.dart';
+import 'package:english_reader/l10n/strings.dart';
 import 'package:english_reader/main.dart' as entry;
 import 'package:english_reader/motion/collect_button.dart';
 import 'package:english_reader/motion/sliding_tabs.dart';
@@ -11,7 +16,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 端到端主链路：登录 → 列表 → 共享元素转场 → 取词收藏 → 位置恢复 → 读完庆祝
-/// → 手势返回（中途取消 + 完成）→ 生词本跳回原文。
+/// → 收藏文章 → 句子划线 → 手势返回（中途取消 + 完成）→ 笔记跳回原文（单词 / 句子）
+/// → 搜索并定位到正文命中 → 收藏的文章 → 切换界面语言。
 ///
 /// 运行（模拟器 / 真机均可，帧耗时数据请用真机 + --profile）：
 ///   flutter drive --driver=test_driver/integration_test.dart \
@@ -44,7 +50,11 @@ void main() {
 
   testWidgets('主链路', (tester) async {
     entry.main();
-    await pumpUntil(tester, find.byWidgetPredicate((w) => w is Text && (w.data == '登录' || w.data == '今天读点什么？')));
+    await pumpUntil(tester, find.byWidgetPredicate((w) => w is LoginPage || w is HomeShell));
+    // 测试按中文文案查找控件：先固定为中文，结束时还原用户原来的设置。
+    final previousLanguage = app.settings.language;
+    app.settings.language = AppLanguage.zh;
+    await wait(tester, 600);
 
     // ---- 登录 ----
     if (find.text('今天读点什么？').evaluate().isEmpty) {
@@ -60,6 +70,11 @@ void main() {
     await app.db.delete('reading_progress', where: 'user_id = ?', whereArgs: [uid]);
     await app.db.delete('reading_sessions', where: 'user_id = ?', whereArgs: [uid]);
     await app.db.delete('vocabulary', where: 'user_id = ?', whereArgs: [uid]);
+    for (final table in ['article_favorites', 'sentence_marks', 'search_history']) {
+      await app.db.delete(table, where: 'user_id = ?', whereArgs: [uid]);
+    }
+    app.favorites.revision.value++;
+    app.sentences.revision.value++;
     app.progress.revision.value++;
     app.vocab.revision.value++;
 
@@ -99,6 +114,15 @@ void main() {
     await wait(tester, 800);
     await shot(tester, '04_reader_top');
 
+    // ---- 收藏文章：顶栏书签形变弹跳 ----
+    final bookmark = find.byWidgetPredicate((w) => w is CollectButton && w.activeIcon == Icons.bookmark_rounded);
+    await tester.tap(bookmark);
+    await wait(tester, 200);
+    await shot(tester, '04b_favorite_bounce');
+    await wait(tester, 800);
+    final openedId = tester.widget<ReaderPage>(find.byType(ReaderPage)).summary.id;
+    expect(await app.favorites.isFavorite(uid, openedId), isTrue);
+
     // ---- 长按取词 + 收藏 ----
     final paragraph = tester.state<ParagraphViewState>(find.byType(ParagraphView).first);
     final wordRect = paragraph.globalRectOfWord(4)!;
@@ -113,10 +137,15 @@ void main() {
     await shot(tester, '06_collect_bounce');
     await wait(tester, 700);
     expect(await app.vocab.count(uid), 1);
-    // 点空白处关闭气泡
-    await tester.tapAt(const Offset(40, 140));
-    await wait(tester, 300);
+
+    // ---- 句子划线：气泡关闭，荧光笔沿行涂出 ----
+    await tester.tap(find.text('划线本句'));
+    await wait(tester, 200);
+    await shot(tester, '06b_sentence_marking');
+    await wait(tester, 700);
+    await shot(tester, '06c_sentence_marked');
     expect(find.byType(WordPopup), findsNothing);
+    expect(await app.sentences.count(uid), 1);
 
     // ---- 读到一半 → 返回 → 重进：精确恢复位置 ----
     final scroll = readerScroll(tester);
@@ -155,6 +184,7 @@ void main() {
     expect(find.byType(ReaderPage), findsNothing, reason: '快速右滑应完成返回');
     await wait(tester, 800);
     expect(find.text('继续阅读'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is FavoriteBadge && w.visible), findsOneWidget, reason: '收藏的文章卡片应显示角标');
     await shot(tester, '09_list_continue_card');
 
     // 从「继续阅读」重进：应回到刚才的位置
@@ -194,10 +224,10 @@ void main() {
     await wait(tester, 1000);
     expect(find.byType(ReaderPage), findsNothing);
 
-    // ---- 生词本 → 跳回原文出处 ----
-    await tester.tap(find.text('生词本').last);
+    // ---- 笔记 · 单词 → 跳回原文出处 ----
+    await tester.tap(find.text('笔记').last);
     await wait(tester, 900);
-    await shot(tester, '13_vocab');
+    await shot(tester, '13_notebook_words');
     expect(find.textContaining('原文：$openedTitle'), findsOneWidget);
     await tester.tap(find.textContaining('原文：$openedTitle'));
     await pumpUntil(tester, find.byType(ParagraphView));
@@ -207,13 +237,67 @@ void main() {
     Navigator.of(tester.element(find.byType(ReaderPage))).pop();
     await wait(tester, 900);
 
-    // ---- 我的 / 调试面板 ----
+    // ---- 笔记 · 句子 → 跳回原文并闪烁整句 ----
+    await tester.tap(find.descendant(of: find.byType(SlidingTabs), matching: find.text('句子 1')).first);
+    await wait(tester, 900);
+    await shot(tester, '14b_notebook_sentences');
+    await tester.tap(find.textContaining('原文：').first);
+    await pumpUntil(tester, find.byType(ParagraphView));
+    await wait(tester, 1300);
+    await shot(tester, '14c_jump_to_sentence');
+    Navigator.of(tester.element(find.byType(ReaderPage))).pop();
+    await wait(tester, 900);
+
+    // ---- 搜索：搜索栏共享元素 → 正文命中高亮 → 打开后定位到命中处 → 搜索历史 ----
+    await tester.tap(find.text('阅读').last);
+    await wait(tester, 800);
+    await tester.tap(find.byType(SearchBarHero));
+    await wait(tester, 140);
+    await shot(tester, '15a_search_flight');
+    await wait(tester, 700);
+    await tester.enterText(find.byType(TextField), 'smartphone');
+    await wait(tester, 900);
+    expect(find.byType(ArticleRow), findsNWidgets(2));
+    await shot(tester, '15b_search_results');
+    await tester.tap(find.byType(ArticleRow).first);
+    await pumpUntil(tester, find.byType(ParagraphView));
+    await wait(tester, 1400);
+    await shot(tester, '15c_search_jump');
+    Navigator.of(tester.element(find.byType(ReaderPage))).pop();
+    await wait(tester, 900);
+    await tester.tap(find.byIcon(Icons.cancel_rounded));
+    await wait(tester, 600);
+    expect(find.text('smartphone'), findsOneWidget, reason: '打开过结果的关键词应进入搜索历史');
+    await shot(tester, '15d_search_history');
+    await tester.tap(find.text('取消'));
+    await wait(tester, 900);
+
+    // ---- 我的 → 收藏的文章 → 切换语言 → 调试面板 ----
     await tester.tap(find.text('我的').last);
     await wait(tester, 1200);
-    await shot(tester, '15_profile');
+    await shot(tester, '16_profile');
+    await tester.tap(find.text('收藏的文章'));
+    await wait(tester, 1200);
+    expect(find.byType(ArticleRow), findsOneWidget);
+    await shot(tester, '16b_favorites');
+    Navigator.of(tester.element(find.byType(FavoritesPage))).pop();
+    await wait(tester, 900);
+
+    await tester.tap(find.text('语言'));
+    await wait(tester, 600);
+    await tester.tap(find.text('English'));
+    await wait(tester, 1000);
+    expect(find.text('Notebook'), findsWidgets);
+    await shot(tester, '16c_profile_en');
+    await tester.tap(find.text('Language'));
+    await wait(tester, 600);
+    await tester.tap(find.text('简体中文'));
+    await wait(tester, 1000);
+    expect(find.text('笔记'), findsWidgets);
+
     await tester.tap(find.text('埋点与性能调试面板'));
     await wait(tester, 1500);
-    await shot(tester, '16_debug_panel');
+    await shot(tester, '17_debug_panel');
 
     // 埋点链路：主链路事件都已入队
     await app.analytics.idle;
@@ -232,7 +316,12 @@ void main() {
         'article_finish',
         'word_lookup',
         'word_collect',
+        'article_favorite',
+        'sentence_mark',
+        'search_submit',
+        'search_result_click',
       ]),
     );
+    app.settings.language = previousLanguage;
   });
 }
