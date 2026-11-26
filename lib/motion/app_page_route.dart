@@ -46,7 +46,9 @@ class AppPageRoute<T> extends PageRoute<T> {
   String? get barrierLabel => null;
 
   @override
-  bool canTransitionTo(TransitionRoute<dynamic> nextRoute) => nextRoute is PageRoute;
+  // 只有同样横向滑入的 AppPageRoute 盖上来时，下层才做 25% 视差。
+  // 搜索页这类淡入路由本身不横移，如果下层仍然视差，淡出时右侧会露出导航器背后的黑底。
+  bool canTransitionTo(TransitionRoute<dynamic> nextRoute) => nextRoute is AppPageRoute;
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
@@ -63,7 +65,9 @@ class AppPageRoute<T> extends PageRoute<T> {
     // 手势进行中必须线性映射，否则页面位置和手指对不上。
     final linear = navigator?.userGestureInProgress ?? false;
     final t = linear ? animation.value : _curved(animation);
-    final s = linear ? secondaryAnimation.value : Motion.page.transform(secondaryAnimation.value);
+    // 下层视差必须和上层页面用同一条曲线（包括 pop 时的镜像）：上层滑出了多少，下层就回来多少。
+    // 曲线不一致时，pop 途中上层已经滑走、下层还偏在左边，中间会露出导航器背后的黑底。
+    final s = linear ? secondaryAnimation.value : _curved(secondaryAnimation);
 
     final textDirection = Directionality.of(context);
     final sign = textDirection == TextDirection.rtl ? -1.0 : 1.0;
