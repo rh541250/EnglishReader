@@ -8,6 +8,7 @@ import '../../analytics/event_schema.dart';
 import '../../app/app_scope.dart';
 import '../../app/theme.dart';
 import '../../data/auth_service.dart';
+import '../../l10n/strings.dart';
 import '../../motion/entrance.dart';
 
 /// 登录 / 注册。本地 Mock 鉴权，校验方式见 [AuthService] 的文档注释。
@@ -26,7 +27,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   bool _register = false;
   bool _busy = false;
   bool _obscure = true;
-  String? _error;
+  AuthError? _error;
 
   @override
   void initState() {
@@ -60,7 +61,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     } on AuthException catch (e) {
       if (!mounted) return;
       unawaited(HapticFeedback.heavyImpact());
-      setState(() => _error = e.message);
+      setState(() => _error = e.error);
       _shake.forward(from: 0);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -79,6 +80,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = S.of(context);
     InputDecoration deco(String label, IconData icon, {Widget? suffix}) => InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon, size: 20),
@@ -137,7 +139,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       child: Text(
-                        _register ? '创建一个本地账号' : '每天一篇，离线也能读',
+                        _register ? s.registerTagline : s.loginTagline,
                         key: ValueKey(_register),
                         style: TextStyle(fontSize: 15, color: p.textSecondary),
                       ),
@@ -161,7 +163,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             textInputAction: TextInputAction.next,
                             autocorrect: false,
                             enableSuggestions: false,
-                            decoration: deco('用户名', Icons.person_outline_rounded),
+                            decoration: deco(s.username, Icons.person_outline_rounded),
                           ),
                           const SizedBox(height: 14),
                           TextField(
@@ -170,7 +172,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => _submit(),
                             decoration: deco(
-                              '密码',
+                              s.password,
                               Icons.lock_outline_rounded,
                               suffix: IconButton(
                                 icon: Icon(
@@ -192,7 +194,10 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                         ? const SizedBox(width: double.infinity, height: 14)
                         : Padding(
                             padding: const EdgeInsets.only(top: 10, left: 4, bottom: 4),
-                            child: Text(_error!, style: const TextStyle(color: Color(0xFFE5484D), fontSize: 13)),
+                            child: Text(
+                              S.of(context).authError(_error!),
+                              style: const TextStyle(color: Color(0xFFE5484D), fontSize: 13),
+                            ),
                           ),
                   ),
                   const SizedBox(height: 8),
@@ -209,7 +214,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                         ),
                         child: _busy
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))
-                            : Text(_register ? '注册并登录' : '登录'),
+                            : Text(_register ? s.registerAndLogin : s.login),
                       ),
                     ),
                   ),
@@ -224,9 +229,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             _register = !_register;
                             _error = null;
                           }),
-                          child: Text(_register ? '已有账号？去登录' : '没有账号？去注册'),
+                          child: Text(_register ? s.toLogin : s.toRegister),
                         ),
-                        TextButton(onPressed: _fillDemo, child: const Text('填入演示账号')),
+                        TextButton(onPressed: _fillDemo, child: Text(s.fillDemo)),
                       ],
                     ),
                   ),

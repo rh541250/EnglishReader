@@ -5,6 +5,7 @@ import '../../analytics/event_schema.dart';
 import '../../app/app_scope.dart';
 import '../../app/settings.dart';
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 
 /// 阅读设置面板：字号、行距、主题。改动即时生效，背后的正文实时预览。
 class ReaderSettingsSheet extends StatelessWidget {
@@ -25,6 +26,7 @@ class ReaderSettingsSheet extends StatelessWidget {
       listenable: settings,
       builder: (context, _) {
         final p = context.palette;
+        final s = S.of(context);
         final label = TextStyle(fontSize: 13, color: p.textSecondary, fontWeight: FontWeight.w600);
         return SafeArea(
           top: false,
@@ -44,7 +46,7 @@ class ReaderSettingsSheet extends StatelessWidget {
                 const SizedBox(height: 18),
                 Row(
                   children: [
-                    Text('字号', style: label),
+                    Text(s.fontSize, style: label),
                     const Spacer(),
                     Text('${settings.fontSize.round()}', style: label.copyWith(color: p.text)),
                   ],
@@ -78,7 +80,7 @@ class ReaderSettingsSheet extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Text('行距', style: label),
+                    Text(s.lineHeight, style: label),
                     const Spacer(),
                     Text(settings.lineHeight.toStringAsFixed(1), style: label.copyWith(color: p.text)),
                   ],
@@ -103,7 +105,7 @@ class ReaderSettingsSheet extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text('主题', style: label),
+                Text(s.theme, style: label),
                 const SizedBox(height: 12),
                 const ThemeSelector(),
               ],
@@ -152,7 +154,7 @@ class ThemeSelector extends StatelessWidget {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    t.label,
+                    S.of(context).themeName(t),
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppPalette.of(t).text),
                   ),
                 ),

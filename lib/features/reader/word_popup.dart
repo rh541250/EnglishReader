@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../app/theme.dart';
 import '../../data/models.dart';
+import '../../l10n/strings.dart';
 import '../../motion/collect_button.dart';
 import '../../motion/motion.dart';
 
@@ -19,6 +20,8 @@ class WordPopup extends StatefulWidget {
     required this.entry,
     required this.collected,
     required this.onToggleCollect,
+    required this.sentenceMarked,
+    required this.onToggleSentence,
   });
 
   /// 单词包围盒（所在 Stack 的坐标系）。
@@ -30,6 +33,10 @@ class WordPopup extends StatefulWidget {
   final DictEntry entry;
   final bool collected;
   final ValueChanged<bool> onToggleCollect;
+
+  /// 单词所在的句子是否已划线；底部按钮据此显示「划线本句」或「取消划线」。
+  final bool sentenceMarked;
+  final VoidCallback onToggleSentence;
 
   @override
   State<WordPopup> createState() => _WordPopupState();
@@ -53,12 +60,14 @@ class _WordPopupState extends State<WordPopup> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final above = widget.anchor.top - widget.topInset > 170;
+    final s = S.of(context);
+    // 气泡高约 150：单词上方空间够就放上方（不挡住正在读的那一行），否则放下方。
+    final above = widget.anchor.top - widget.topInset > 200;
     final e = widget.entry;
 
     final card = Container(
       constraints: const BoxConstraints(maxWidth: 300, minWidth: 180),
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
       decoration: BoxDecoration(
         color: p.surface,
         borderRadius: BorderRadius.circular(16),
@@ -67,51 +76,85 @@ class _WordPopupState extends State<WordPopup> with SingleTickerProviderStateMix
           BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 28, offset: const Offset(0, 10)),
         ],
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        e.found ? e.word : widget.display,
-                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: p.text, height: 1.2),
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            e.found ? e.word : widget.display,
+                            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: p.text, height: 1.2),
+                          ),
+                        ),
+                        if (e.phonetic.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(e.phonetic, style: TextStyle(fontSize: 13, color: p.textTertiary)),
+                        ],
+                      ],
                     ),
-                    if (e.phonetic.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(e.phonetic, style: TextStyle(fontSize: 13, color: p.textTertiary)),
-                    ],
+                    const SizedBox(height: 6),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          if (e.pos.isNotEmpty)
+                            TextSpan(
+                              text: '${e.pos} ',
+                              style: TextStyle(
+                                color: p.accent,
+                                fontWeight: FontWeight.w700,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          TextSpan(text: e.found ? e.meaning : s.notInDictionary),
+                        ],
+                      ),
+                      style: TextStyle(fontSize: 14.5, height: 1.45, color: e.found ? p.textSecondary : p.textTertiary),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      if (e.pos.isNotEmpty)
-                        TextSpan(
-                          text: '${e.pos} ',
-                          style: TextStyle(color: p.accent, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic),
-                        ),
-                      TextSpan(text: e.meaning),
-                    ],
-                  ),
-                  style: TextStyle(fontSize: 14.5, height: 1.45, color: e.found ? p.textSecondary : p.textTertiary),
-                ),
-              ],
+              ),
+              const SizedBox(width: 4),
+              CollectButton(
+                collected: widget.collected,
+                onChanged: widget.onToggleCollect,
+                size: 26,
+                semanticLabel: widget.collected ? s.uncollectWord : s.collectWord,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: p.divider),
+          // 句子划线入口：复用长按取词这一个手势，不再新增手势去和滚动、取词竞争。
+          TextButton.icon(
+            onPressed: widget.onToggleSentence,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              visualDensity: VisualDensity.compact,
+              foregroundColor: widget.sentenceMarked ? p.textSecondary : p.accent,
+            ),
+            icon: Icon(
+              widget.sentenceMarked ? Icons.format_strikethrough_rounded : Icons.border_color_rounded,
+              size: 17,
+            ),
+            label: Text(
+              widget.sentenceMarked ? s.unmarkSentence : s.markSentence,
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
             ),
           ),
-          const SizedBox(width: 4),
-          CollectButton(collected: widget.collected, onChanged: widget.onToggleCollect, size: 26),
         ],
       ),
     );

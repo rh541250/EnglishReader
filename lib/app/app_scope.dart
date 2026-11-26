@@ -17,7 +17,10 @@ import '../core/ids.dart';
 import '../data/article_repository.dart';
 import '../data/auth_service.dart';
 import '../data/dictionary_repository.dart';
+import '../data/favorite_repository.dart';
 import '../data/progress_repository.dart';
+import '../data/search_repository.dart';
+import '../data/sentence_repository.dart';
 import '../data/vocab_repository.dart';
 import 'settings.dart';
 
@@ -41,6 +44,9 @@ class AppScope {
     required this.articles,
     required this.progress,
     required this.vocab,
+    required this.favorites,
+    required this.sentences,
+    required this.search,
     required this.dictionary,
     required this.auth,
     required this.events,
@@ -58,6 +64,9 @@ class AppScope {
   final ArticleRepository articles;
   final ProgressRepository progress;
   final VocabRepository vocab;
+  final FavoriteRepository favorites;
+  final SentenceRepository sentences;
+  final SearchRepository search;
   final DictionaryRepository dictionary;
   final AuthService auth;
   final EventRepository events;
@@ -126,6 +135,9 @@ class AppScope {
       articles: ArticleRepository(db),
       progress: ProgressRepository(db),
       vocab: VocabRepository(db),
+      favorites: FavoriteRepository(db),
+      sentences: SentenceRepository(db),
+      search: SearchRepository(db),
       dictionary: dictionary,
       auth: auth,
       events: events,

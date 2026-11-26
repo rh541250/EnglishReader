@@ -36,7 +36,7 @@ class DictionaryRepository {
   /// 取词。词表未收录时返回占位词条（found = false），仍可收藏。
   DictEntry lookup(String token) {
     final lower = token.toLowerCase();
-    return _resolve(lower) ?? DictEntry(word: lower, phonetic: '', pos: '', meaning: 'Mock 词表暂未收录该词', found: false);
+    return _resolve(lower) ?? DictEntry(word: lower, phonetic: '', pos: '', meaning: '', found: false);
   }
 
   DictEntry? _resolve(String lower) {

@@ -25,11 +25,14 @@ class MemoryTokenStore implements TokenStore {
   Future<void> delete(String key) async => _m.remove(key);
 }
 
+/// 登录 / 注册失败原因。业务层只给错误码，文案由界面按当前语言决定（见 `S.authError`）。
+enum AuthError { invalidUsername, passwordTooShort, usernameTaken, wrongCredentials }
+
 class AuthException implements Exception {
-  const AuthException(this.message);
-  final String message;
+  const AuthException(this.error);
+  final AuthError error;
   @override
-  String toString() => message;
+  String toString() => 'AuthException(${error.name})';
 }
 
 /// 本地 Mock 鉴权。
@@ -68,24 +71,24 @@ class AuthService {
   Future<AppUser> register(String username, String password) async {
     final name = username.trim();
     if (!RegExp(r'^[A-Za-z0-9_]{3,20}$').hasMatch(name)) {
-      throw const AuthException('用户名需为 3-20 位字母、数字或下划线');
+      throw const AuthException(AuthError.invalidUsername);
     }
     if (password.length < 6) {
-      throw const AuthException('密码至少 6 位');
+      throw const AuthException(AuthError.passwordTooShort);
     }
     final exists = await _db.query('users', where: 'username = ?', whereArgs: [name], limit: 1);
-    if (exists.isNotEmpty) throw const AuthException('该用户名已被注册');
+    if (exists.isNotEmpty) throw const AuthException(AuthError.usernameTaken);
     await _createUser(name, password);
     return login(name, password);
   }
 
   Future<AppUser> login(String username, String password) async {
     final rows = await _db.query('users', where: 'username = ?', whereArgs: [username.trim()], limit: 1);
-    if (rows.isEmpty) throw const AuthException('账号或密码错误');
+    if (rows.isEmpty) throw const AuthException(AuthError.wrongCredentials);
     final row = rows.first;
     final expected = row['password_hash'] as String;
     final actual = _hash(password, row['salt'] as String);
-    if (!_constantTimeEquals(expected, actual)) throw const AuthException('账号或密码错误');
+    if (!_constantTimeEquals(expected, actual)) throw const AuthException(AuthError.wrongCredentials);
 
     final user = AppUser(id: row['id'] as String, username: row['username'] as String);
     final token = await _issueToken(user.id);

@@ -61,6 +61,12 @@ abstract final class Ev {
   static const articleShare = 'article_share';
   static const offlineHit = 'offline_hit';
   static const settingChange = 'reader_setting_change';
+  static const searchSubmit = 'search_submit';
+  static const searchResultClick = 'search_result_click';
+  static const articleFavorite = 'article_favorite';
+  static const articleUnfavorite = 'article_unfavorite';
+  static const sentenceMark = 'sentence_mark';
+  static const sentenceUnmark = 'sentence_unmark';
 }
 
 const List<EventSpec> kEventSpecs = [
@@ -100,7 +106,18 @@ const List<EventSpec> kEventSpecs = [
   EventSpec(Ev.wordRemove, '取消收藏 / 删除生词', required: ['word'], optional: ['source', 'article_id']),
   EventSpec(Ev.articleShare, '分享文章', required: ['article_id'], optional: ['channel']),
   EventSpec(Ev.offlineHit, '离线命中：无网络状态下从本地库成功提供内容', required: ['resource'], optional: ['article_id']),
-  EventSpec(Ev.settingChange, '阅读设置变更', required: ['key', 'value']),
+  EventSpec(Ev.settingChange, '阅读设置 / 界面语言变更', required: ['key', 'value']),
+  EventSpec(
+    Ev.searchSubmit,
+    '确认一次搜索（键盘回车、点搜索历史、或从结果里打开文章）',
+    required: ['keyword', 'result_count'],
+    optional: ['source'],
+  ),
+  EventSpec(Ev.searchResultClick, '点击搜索结果', required: ['article_id', 'position', 'keyword'], optional: ['hit']),
+  EventSpec(Ev.articleFavorite, '收藏文章', required: ['article_id'], optional: ['source']),
+  EventSpec(Ev.articleUnfavorite, '取消收藏文章', required: ['article_id'], optional: ['source']),
+  EventSpec(Ev.sentenceMark, '划线句子', required: ['article_id', 'paragraph_index'], optional: ['length']),
+  EventSpec(Ev.sentenceUnmark, '取消划线', required: ['article_id', 'paragraph_index'], optional: ['source']),
 ];
 
 final Map<String, EventSpec> kEventSpecByName = {for (final s in kEventSpecs) s.name: s};

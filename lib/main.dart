@@ -6,6 +6,7 @@ import 'app/theme.dart';
 import 'data/models.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/home_shell.dart';
+import 'l10n/strings.dart';
 import 'motion/app_page_route.dart';
 import 'motion/frame_monitor.dart';
 
@@ -90,6 +91,12 @@ class _EnglishReaderAppState extends State<EnglishReaderApp> with WidgetsBinding
                 // 主题切换时全局颜色做 260ms 补间，而不是硬切。
                 themeAnimationDuration: const Duration(milliseconds: 260),
                 themeAnimationCurve: Curves.easeOut,
+                // 界面语言：跟随系统时 locale 为 null，由 localeResolutionCallback 归一到中 / 英。
+                // material_ui 自带的 GlobalMaterialLocalizations 负责系统控件（文本选择菜单等）的文案。
+                locale: scope.settings.language.locale,
+                supportedLocales: kSupportedLocales,
+                localeResolutionCallback: (locale, _) => resolveAppLocale(locale),
+                localizationsDelegates: const [S.delegate, ...GlobalMaterialLocalizations.delegates],
                 onGenerateRoute: (settings) =>
                     AppPageRoute<void>(settings: settings, swipeBack: false, builder: (_) => const _AuthGate()),
               ),

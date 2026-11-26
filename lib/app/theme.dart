@@ -2,13 +2,12 @@ import 'package:material_ui/material_ui.dart';
 
 /// 阅读主题：日间 / 护眼 / 夜间。作用于整个 App。
 enum ReaderTheme {
-  light('light', '日间'),
-  sepia('sepia', '护眼'),
-  dark('dark', '夜间');
+  light('light'),
+  sepia('sepia'),
+  dark('dark');
 
-  const ReaderTheme(this.key, this.label);
+  const ReaderTheme(this.key);
   final String key;
-  final String label;
 
   static ReaderTheme fromKey(String? key) => values.firstWhere((t) => t.key == key, orElse: () => ReaderTheme.light);
 }
@@ -30,6 +29,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.skeletonHighlight,
     required this.success,
     required this.highlight,
+    required this.marker,
     required this.brightness,
   });
 
@@ -48,6 +48,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
 
   /// 取词高亮底色。
   final Color highlight;
+
+  /// 句子划线的荧光笔底色。
+  final Color marker;
   final Brightness brightness;
 
   static const light = AppPalette(
@@ -64,6 +67,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     skeletonHighlight: Color(0xFFF7F6F2),
     success: Color(0xFF1FA971),
     highlight: Color(0x333F51E0),
+    marker: Color(0x66FFD54F),
     brightness: Brightness.light,
   );
 
@@ -81,6 +85,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     skeletonHighlight: Color(0xFFF6EED9),
     success: Color(0xFF4E8A3E),
     highlight: Color(0x38B4601F),
+    marker: Color(0x59F2B33D),
     brightness: Brightness.light,
   );
 
@@ -98,6 +103,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     skeletonHighlight: Color(0xFF33343D),
     success: Color(0xFF4CCB95),
     highlight: Color(0x408EA2FF),
+    marker: Color(0x4DE0B341),
     brightness: Brightness.dark,
   );
 
@@ -128,6 +134,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       skeletonHighlight: c(skeletonHighlight, other.skeletonHighlight),
       success: c(success, other.success),
       highlight: c(highlight, other.highlight),
+      marker: c(marker, other.marker),
       brightness: t < 0.5 ? brightness : other.brightness,
     );
   }

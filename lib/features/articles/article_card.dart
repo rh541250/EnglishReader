@@ -2,6 +2,10 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../app/theme.dart';
 import '../../data/models.dart';
+import '../../domain/text_ranges.dart';
+import '../../l10n/strings.dart';
+import '../../motion/collect_button.dart';
+import '../../motion/motion.dart';
 import '../../motion/pressable.dart';
 import '../../motion/progress_ring.dart';
 import '../../motion/shimmer.dart';
@@ -18,6 +22,7 @@ class ArticleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = S.of(context);
     final a = article;
     return Pressable(
       onTap: onTap,
@@ -33,7 +38,14 @@ class ArticleCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 7.6,
-              child: CoverHero(tag: coverHeroTag(heroScope, a.id), articleId: a.id, category: a.category, radius: 14),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CoverHero(tag: coverHeroTag(heroScope, a.id), articleId: a.id, category: a.category, radius: 14),
+                  // 收藏角标放在 Hero 之外：它属于列表卡片，不应该跟着封面飞进详情页。
+                  Positioned(top: 10, right: 10, child: FavoriteBadge(visible: a.favorited)),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 12, 6, 4),
@@ -69,13 +81,16 @@ class ArticleCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _Tag(text: a.category.label, color: p.accent),
+                      _Tag(text: s.category(a.category), color: p.accent),
                       const SizedBox(width: 6),
                       DifficultyDots(level: a.difficulty),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${kDifficultyLabels[a.difficulty]} · ${a.minutes} 分钟',
+                          '${s.difficulty(a.difficulty)} · ${s.minutes(a.minutes)} · '
+                          '${s.publishDate(a.publishedDate, DateTime.now())}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 12, color: p.textTertiary),
                         ),
                       ),
@@ -180,7 +195,7 @@ class ContinueCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '继续阅读',
+                    S.of(context).continueReading,
                     style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: p.accent),
                   ),
                   const SizedBox(height: 3),
@@ -276,6 +291,109 @@ class ArticleCardSkeleton extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 卡片封面右上角的收藏角标：收藏状态变化时弹簧缩放出现 / 收起。
+class FavoriteBadge extends StatelessWidget {
+  const FavoriteBadge({super.key, required this.visible, this.size = 30});
+  final bool visible;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: visible ? 1 : 0,
+      duration: Motion.entrance,
+      curve: visible ? Curves.easeOutBack : Curves.easeInCubic,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.32),
+          borderRadius: BorderRadius.circular(size * 0.3),
+        ),
+        child: Icon(Icons.bookmark_rounded, size: size * 0.6, color: CollectButton.activeColor),
+      ),
+    );
+  }
+}
+
+/// 把 [text] 里的 [matches] 区间渲染为高亮（搜索结果用）。
+TextSpan highlightedSpan(String text, List<Span> matches, TextStyle base, TextStyle highlight) {
+  if (matches.isEmpty) return TextSpan(text: text, style: base);
+  final children = <TextSpan>[];
+  var cursor = 0;
+  for (final m in matches) {
+    if (m.start > cursor) children.add(TextSpan(text: text.substring(cursor, m.start)));
+    children.add(TextSpan(text: text.substring(m.start, m.end), style: highlight));
+    cursor = m.end;
+  }
+  if (cursor < text.length) children.add(TextSpan(text: text.substring(cursor)));
+  return TextSpan(style: base, children: children);
+}
+
+/// 紧凑的文章行：小封面（共享元素）+ 标题 + 副标题。用于搜索结果与「收藏的文章」。
+class ArticleRow extends StatelessWidget {
+  const ArticleRow({
+    super.key,
+    required this.article,
+    required this.heroScope,
+    required this.onTap,
+    required this.title,
+    required this.subtitle,
+    this.footer,
+  });
+
+  final ArticleSummary article;
+  final String heroScope;
+  final VoidCallback onTap;
+  final Widget title;
+  final Widget subtitle;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Pressable(
+      pressedScale: 0.985,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: p.divider),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 76,
+              height: 76,
+              child: CoverHero(
+                tag: coverHeroTag(heroScope, article.id),
+                articleId: article.id,
+                category: article.category,
+                radius: 12,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  title,
+                  const SizedBox(height: 4),
+                  subtitle,
+                  if (footer != null) ...[const SizedBox(height: 8), footer!],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

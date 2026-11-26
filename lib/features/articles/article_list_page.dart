@@ -9,11 +9,14 @@ import '../../app/app_scope.dart';
 import '../../app/theme.dart';
 import '../../data/models.dart';
 import '../../data/progress_repository.dart';
+import '../../l10n/strings.dart';
 import '../../motion/entrance.dart';
 import '../../motion/motion.dart';
 import '../../motion/shimmer.dart';
 import '../../motion/sliding_tabs.dart';
 import '../reader/reader_page.dart';
+import '../search/search_bar.dart';
+import '../search/search_page.dart';
 import 'article_card.dart';
 
 /// 数据都在本地 SQLite，查询是毫秒级的；首次加载与下拉刷新时加一段模拟延迟，
@@ -49,7 +52,9 @@ class _ArticleListPageState extends State<ArticleListPage> {
   @override
   void initState() {
     super.initState();
+    // 进度、收藏任一变化（例如从阅读页返回）都静默刷新，卡片上的进度环与收藏角标随之补间。
     app.progress.revision.addListener(_refreshSilently);
+    app.favorites.revision.addListener(_refreshSilently);
     app.analytics.track(Ev.pageView, {'page': 'article_list'});
     _loadFirstPage(withLatency: true);
   }
@@ -57,6 +62,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
   @override
   void dispose() {
     app.progress.revision.removeListener(_refreshSilently);
+    app.favorites.revision.removeListener(_refreshSilently);
     _scroll.dispose();
     super.dispose();
   }
@@ -159,6 +165,10 @@ class _ArticleListPageState extends State<ArticleListPage> {
     Navigator.of(context).push(ReaderPage.route(summary: a, source: source, heroScope: heroScope));
   }
 
+  void _openSearch() {
+    Navigator.of(context).push(SearchPage.route());
+  }
+
   void _onExposed(ArticleSummary a, int position) {
     if (!app.analytics.markExposed(a.id)) return;
     app.analytics.track(Ev.articleExpose, {
@@ -173,6 +183,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = S.of(context);
     final top = MediaQuery.paddingOf(context).top;
     final user = app.auth.currentUser.value;
 
@@ -202,12 +213,12 @@ class _ArticleListPageState extends State<ArticleListPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Hi, ${user?.username ?? ''}',
+                              s.greeting(user?.username ?? ''),
                               style: TextStyle(fontSize: 14, color: p.textSecondary, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '今天读点什么？',
+                              s.homeTitle,
                               style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: p.text, height: 1.2),
                             ),
                           ],
@@ -216,6 +227,12 @@ class _ArticleListPageState extends State<ArticleListPage> {
                       _StreakChip(days: _streak),
                     ],
                   ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: SearchBarHero(onTap: _openSearch),
                 ),
               ),
               SliverToBoxAdapter(
@@ -242,7 +259,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       SlidingTabs(
-                        labels: [for (final c in _categories) c?.label ?? '全部'],
+                        labels: [for (final c in _categories) c == null ? s.allCategories : s.category(c)],
                         index: _categoryIndex,
                         onChanged: _onCategory,
                       ),
@@ -270,7 +287,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
-                    child: Text('这个筛选条件下还没有文章', style: TextStyle(color: p.textTertiary, fontSize: 14)),
+                    child: Text(s.emptyFilter, style: TextStyle(color: p.textTertiary, fontSize: 14)),
                   ),
                 )
               else
@@ -310,7 +327,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
                             child: CircularProgressIndicator(strokeWidth: 2.2, color: p.accent),
                           )
                         : !_hasMore && _items.isNotEmpty
-                        ? Text('— 已经到底啦 —', style: TextStyle(fontSize: 12.5, color: p.textTertiary))
+                        ? Text(s.listEnd, style: TextStyle(fontSize: 12.5, color: p.textTertiary))
                         : null,
                   ),
                 ),
@@ -350,7 +367,11 @@ class _DifficultyFilter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final options = <int?, String>{null: '全部难度', ...kDifficultyLabels};
+    final s = S.of(context);
+    final options = <int?, String>{
+      null: s.allLevels,
+      for (final l in [1, 2, 3]) l: s.difficulty(l),
+    };
     return SizedBox(
       height: 32,
       child: ListView(
@@ -422,7 +443,7 @@ class _StreakChip extends StatelessWidget {
               ),
             ),
             child: Text(
-              '$days 天',
+              S.of(context).streakChip(days),
               key: ValueKey(days),
               style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: days > 0 ? fire : p.textTertiary),
             ),

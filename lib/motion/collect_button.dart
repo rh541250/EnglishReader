@@ -14,14 +14,35 @@ import '../app/theme.dart';
 /// - 20~75%  8 颗粒子从中心向外放射并缩小淡出，外加一圈扩散的描边圆环。
 /// 取消收藏只做一次轻微的缩小回弹，不放粒子——「取消」不应该比「收藏」更热闹。
 class CollectButton extends StatefulWidget {
-  const CollectButton({super.key, required this.collected, required this.onChanged, this.size = 26, this.label});
+  const CollectButton({
+    super.key,
+    required this.collected,
+    required this.onChanged,
+    required this.semanticLabel,
+    this.size = 26,
+    this.icon = Icons.star_outline_rounded,
+    this.activeIcon = Icons.star_rounded,
+    this.inactiveColor,
+    this.extent,
+  });
 
   final bool collected;
   final ValueChanged<bool> onChanged;
   final double size;
 
-  /// 可选文字标签（显示在图标右侧）。
-  final String? label;
+  /// 未收藏 / 已收藏时的图标。单词用星标，文章用书签。
+  final IconData icon;
+  final IconData activeIcon;
+
+  /// 未收藏时的颜色，默认 textSecondary（阅读页顶栏压在封面上时需要白色）。
+  final Color? inactiveColor;
+  final String semanticLabel;
+
+  /// 点击区域与粒子画布的边长，默认 size × 1.7。
+  final double? extent;
+
+  /// 「收藏」统一用这一种金色，单词、句子、文章保持同一视觉语言。
+  static const Color activeColor = Color(0xFFF5A623);
 
   @override
   State<CollectButton> createState() => _CollectButtonState();
@@ -80,62 +101,45 @@ class _CollectButtonState extends State<CollectButton> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    const gold = Color(0xFFF5A623);
+    const gold = CollectButton.activeColor;
     final size = widget.size;
-
-    final icon = AnimatedBuilder(
-      animation: _c,
-      builder: (context, _) {
-        final t = _c.value;
-        final sx = _celebrate ? _scaleX.transform(t) : _shrink.transform(t);
-        final sy = _celebrate ? _scaleY.transform(t) : _shrink.transform(t);
-        // 实心星在「弹起」那一刻出现。
-        final filled = widget.collected && (!_celebrate || t >= 0.18);
-        return SizedBox(
-          width: size * 1.7,
-          height: size * 1.7,
-          child: CustomPaint(
-            painter: _celebrate && t < 1 ? _BurstPainter(t, gold) : null,
-            child: Center(
-              child: Transform(
-                alignment: Alignment.bottomCenter,
-                transform: Matrix4.diagonal3Values(sx, sy, 1),
-                child: Icon(
-                  filled ? Icons.star_rounded : Icons.star_outline_rounded,
-                  size: size,
-                  color: filled ? gold : p.textSecondary,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    final extent = widget.extent ?? size * 1.7;
 
     return Semantics(
       button: true,
-      label: widget.collected ? '取消收藏' : '收藏',
+      toggled: widget.collected,
+      label: widget.semanticLabel,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _toggle,
-        child: widget.label == null
-            ? icon
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  icon,
-                  AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 200),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: widget.collected ? gold : p.textSecondary,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) {
+            final t = _c.value;
+            final sx = _celebrate ? _scaleX.transform(t) : _shrink.transform(t);
+            final sy = _celebrate ? _scaleY.transform(t) : _shrink.transform(t);
+            // 实心图标在「弹起」那一刻出现。
+            final filled = widget.collected && (!_celebrate || t >= 0.18);
+            return SizedBox(
+              width: extent,
+              height: extent,
+              child: CustomPaint(
+                painter: _celebrate && t < 1 ? _BurstPainter(t, gold) : null,
+                child: Center(
+                  child: Transform(
+                    alignment: Alignment.bottomCenter,
+                    transform: Matrix4.diagonal3Values(sx, sy, 1),
+                    child: Icon(
+                      filled ? widget.activeIcon : widget.icon,
+                      size: size,
+                      color: filled ? gold : (widget.inactiveColor ?? p.textSecondary),
                     ),
-                    child: Text(widget.collected ? '已收藏' : widget.label!),
                   ),
-                  const SizedBox(width: 4),
-                ],
+                ),
               ),
+            );
+          },
+        ),
       ),
     );
   }

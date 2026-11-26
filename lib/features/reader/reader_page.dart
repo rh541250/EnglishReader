@@ -12,8 +12,11 @@ import '../../data/models.dart';
 import '../../data/progress_repository.dart';
 import '../../domain/reading_math.dart';
 import '../../domain/reading_timer.dart';
+import '../../domain/text_ranges.dart';
 import '../../domain/tokenizer.dart';
+import '../../l10n/strings.dart';
 import '../../motion/app_page_route.dart';
+import '../../motion/collect_button.dart';
 import '../../motion/confetti.dart';
 import '../../motion/entrance.dart';
 import '../../motion/motion.dart';
@@ -24,11 +27,16 @@ import 'paragraph_view.dart';
 import 'reader_settings_sheet.dart';
 import 'word_popup.dart';
 
-/// 从生词本「跳回原文出处」时携带的定位。
+/// 打开文章时要定位并闪烁提示的位置：笔记里的单词 / 句子「跳回原文」、搜索命中的正文片段。
+/// 只用段落序号和段内字符偏移（或词序号）表示，与字号、排版无关。
 class ReaderTarget {
-  const ReaderTarget(this.paragraphIndex, this.wordIndex);
+  const ReaderTarget.word(this.paragraphIndex, int this.wordIndex) : start = null, end = null;
+  const ReaderTarget.range(this.paragraphIndex, int this.start, int this.end) : wordIndex = null;
+
   final int paragraphIndex;
-  final int wordIndex;
+  final int? wordIndex;
+  final int? start;
+  final int? end;
 }
 
 class ReaderPage extends StatefulWidget {
@@ -37,7 +45,7 @@ class ReaderPage extends StatefulWidget {
   /// 列表已经拿到的摘要：首帧就能渲染封面和标题，共享元素转场不需要等数据库。
   final ArticleSummary summary;
 
-  /// 打开来源（埋点 article_open.source）：list / continue / vocab / next / prev。
+  /// 打开来源（埋点 article_open.source）：list / continue / search / favorites / notebook / next / prev。
   final String source;
   final String heroScope;
   final ReaderTarget? target;
@@ -76,6 +84,13 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
   List<List<Token>> _tokens = const [];
   ReadingProgress? _saved;
   Set<String> _collected = {};
+  late bool _favorited = widget.summary.favorited;
+
+  /// 每段的句子区间（分句结果与排版无关，加载时算一次）。
+  List<List<Span>> _sentences = const [];
+
+  /// 本篇的划线，按段落分组；每次变更都换新 List，便于 painter 用 identical 判断是否重绘。
+  Map<int, List<Span>> _marks = const {};
   ArticleSummary? _prev;
   ArticleSummary? _next;
 
@@ -119,8 +134,14 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
   late final AnimationController _check = AnimationController(vsync: this, duration: const Duration(milliseconds: 520));
   late final AnimationController _finishCard = AnimationController.unbounded(vsync: this, value: 0);
   final ConfettiController _confetti = ConfettiController();
+  late final AnimationController _markAnim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 460),
+  );
+  int? _markAnimParagraph;
+  Span? _markAnimSpan;
   int? _flashParagraph;
-  int? _flashWord;
+  Span? _flashRange;
   int _streak = 0;
   Timer? _finishCardTimer;
   String? _toast;
@@ -138,6 +159,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     _scroll.addListener(_onScroll);
     app.settings.addListener(_onSettingsChanged);
     app.vocab.revision.addListener(_reloadCollected);
+    app.sentences.revision.addListener(_reloadMarks);
     _load();
   }
 
@@ -147,6 +169,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     WidgetsBinding.instance.removeObserver(this);
     app.settings.removeListener(_onSettingsChanged);
     app.vocab.revision.removeListener(_reloadCollected);
+    app.sentences.revision.removeListener(_reloadMarks);
     _saveTimer?.cancel();
     _heartbeat?.cancel();
     _finishCardTimer?.cancel();
@@ -154,6 +177,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     _scroll.dispose();
     _bodyIn.dispose();
     _flash.dispose();
+    _markAnim.dispose();
     _check.dispose();
     _finishCard.dispose();
     _confetti.dispose();
@@ -175,6 +199,8 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
       app.vocab.collectedWords(uid),
       app.articles.previousOf(_s),
       app.articles.nextOf(_s),
+      app.favorites.isFavorite(uid, _s.id),
+      app.sentences.forArticle(uid, _s.id),
     ]);
     if (!mounted) return;
     final article = results[0] as Article?;
@@ -184,6 +210,9 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     setState(() {
       _article = article;
       _tokens = [for (final p in article.paragraphs) tokenize(p)];
+      _sentences = [for (final p in article.paragraphs) splitSentences(p)];
+      _favorited = results[5] as bool;
+      _marks = _groupMarks(results[6] as List<SentenceMark>);
       _paraKeys = List.generate(article.paragraphs.length, (_) => GlobalKey<ParagraphViewState>());
       _slotKeys = List.generate(article.paragraphs.length, (_) => GlobalKey());
       _saved = saved;
@@ -287,7 +316,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
         // 动画曲线的末值可能有亚像素误差，最后用 jumpTo 精确落到目标偏移。
         if (mounted && _scroll.hasClients) _scroll.jumpTo(offset);
         _programmaticScroll = false;
-        if (mounted) _showToast('已回到上次阅读位置 · ${(saved.progress * 100).round()}%');
+        if (mounted) _showToast(S.of(context).restoredPosition((saved.progress * 100).round()));
       }
     }
     if (!mounted) return;
@@ -304,7 +333,15 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
 
   Future<void> _jumpToTarget(ReaderTarget target) async {
     if (target.paragraphIndex >= _paraKeys.length) return;
-    final rect = _paraKeys[target.paragraphIndex].currentState?.globalRectOfWord(target.wordIndex);
+    final Span range;
+    if (target.wordIndex != null) {
+      final token = wordByIndex(_tokens[target.paragraphIndex], target.wordIndex!);
+      if (token == null) return;
+      range = Span(token.start, token.end);
+    } else {
+      range = Span(target.start!, target.end!);
+    }
+    final rect = _paraKeys[target.paragraphIndex].currentState?.globalRectOfRange(range);
     if (rect == null) return;
     final viewport = MediaQuery.sizeOf(context).height;
     final offset = (_scroll.position.pixels + rect.center.dy - viewport * 0.38).clamp(
@@ -317,7 +354,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     if (!mounted) return;
     setState(() {
       _flashParagraph = target.paragraphIndex;
-      _flashWord = target.wordIndex;
+      _flashRange = range;
     });
     // 闪三下，然后保持熄灭。
     for (var i = 0; i < 3 && mounted; i++) {
@@ -325,7 +362,12 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
       if (!mounted) return;
       await _flash.reverse();
     }
-    if (mounted) setState(() => _flashParagraph = _flashWord = null);
+    if (mounted) {
+      setState(() {
+        _flashParagraph = null;
+        _flashRange = null;
+      });
+    }
   }
 
   /// 字号 / 行距变化：记下当前读到哪句话 → 重排 → 重新测量 → 滚回同一句话。
@@ -527,7 +569,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
         articleId: _s.id,
         paragraphIndex: hit.paragraphIndex,
         wordIndex: hit.token.wordIndex,
-        context: _sentenceAround(article.paragraphs[hit.paragraphIndex], hit.token),
+        context: _sentenceText(hit.paragraphIndex, hit.token.start) ?? '',
       );
       app.analytics.track(Ev.wordCollect, {
         'article_id': _s.id,
@@ -548,18 +590,107 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     setState(() => _collected = words);
   }
 
-  /// 取单词所在的那一句作为生词本里的例句。
-  static String _sentenceAround(String paragraph, Token token) {
-    var start = token.start;
-    while (start > 0 && !'.!?'.contains(paragraph[start - 1])) {
-      start--;
+  /// 单词所在的那一句（生词例句、句子划线共用同一个分句结果，保证两处取到的句子一致）。
+  Span? _sentenceSpan(int paragraph, int offset) =>
+      paragraph < _sentences.length ? sentenceAt(_sentences[paragraph], offset) : null;
+
+  String? _sentenceText(int paragraph, int offset) {
+    final span = _sentenceSpan(paragraph, offset);
+    return span == null ? null : _article!.paragraphs[paragraph].substring(span.start, span.end);
+  }
+
+  // ------------------------------------------------------------------
+  // 句子划线
+  // ------------------------------------------------------------------
+
+  static Map<int, List<Span>> _groupMarks(List<SentenceMark> marks) {
+    final out = <int, List<Span>>{};
+    for (final m in marks) {
+      (out[m.paragraphIndex] ??= []).add(Span(m.start, m.end));
     }
-    var end = token.end;
-    while (end < paragraph.length && !'.!?'.contains(paragraph[end])) {
-      end++;
+    return out;
+  }
+
+  bool _isMarked(int paragraph, Span span) => _marks[paragraph]?.contains(span) ?? false;
+
+  /// 划线 / 取消划线。先改内存并播放动画，再落库：界面零等待，落库失败也只影响持久化。
+  Future<void> _toggleSentence() async {
+    final hit = _hit, article = _article;
+    if (hit == null || article == null) return;
+    final p = hit.paragraphIndex;
+    final span = _sentenceSpan(p, hit.token.start);
+    if (span == null) return;
+    final s = S.of(context);
+    final marked = _isMarked(p, span);
+    _dismissPopup();
+    unawaited(HapticFeedback.lightImpact());
+
+    if (!marked) {
+      setState(() {
+        _marks = {
+          ..._marks,
+          p: [...?_marks[p], span],
+        };
+        _markAnimParagraph = p;
+        _markAnimSpan = span;
+      });
+      unawaited(_markAnim.forward(from: 0));
+      _showToast(s.sentenceMarkedToast);
+      await app.sentences.add(
+        userId: app.userId,
+        articleId: _s.id,
+        paragraphIndex: p,
+        start: span.start,
+        end: span.end,
+        text: article.paragraphs[p].substring(span.start, span.end),
+      );
+      app.analytics.track(Ev.sentenceMark, {
+        'article_id': _s.id,
+        'paragraph_index': p,
+        'length': span.end - span.start,
+      });
+    } else {
+      // 取消：先把色带沿原路「擦」回去，再从列表里移除。
+      setState(() {
+        _markAnimParagraph = p;
+        _markAnimSpan = span;
+      });
+      await _markAnim.reverse(from: 1);
+      if (!mounted) return;
+      setState(() {
+        _marks = {
+          ..._marks,
+          p: [...?_marks[p]]..remove(span),
+        };
+        _markAnimParagraph = null;
+        _markAnimSpan = null;
+      });
+      await app.sentences.remove(userId: app.userId, articleId: _s.id, paragraphIndex: p, start: span.start);
+      app.analytics.track(Ev.sentenceUnmark, {'article_id': _s.id, 'paragraph_index': p, 'source': 'reader'});
     }
-    if (end < paragraph.length) end++;
-    return paragraph.substring(start, end).trim();
+  }
+
+  /// 笔记页删除了划线等外部变化：重新读取（动画进行中时不打断）。
+  Future<void> _reloadMarks() async {
+    if (_markAnim.isAnimating) return;
+    final marks = await app.sentences.forArticle(app.userId, _s.id);
+    if (!mounted || _markAnim.isAnimating) return;
+    setState(() => _marks = _groupMarks(marks));
+  }
+
+  // ------------------------------------------------------------------
+  // 文章收藏
+  // ------------------------------------------------------------------
+
+  Future<void> _toggleFavorite(bool favorite) async {
+    final s = S.of(context);
+    setState(() => _favorited = favorite);
+    _showToast(favorite ? s.favoritedToast : s.unfavoritedToast);
+    await app.favorites.setFavorite(app.userId, _s.id, favorite);
+    app.analytics.track(favorite ? Ev.articleFavorite : Ev.articleUnfavorite, {
+      'article_id': _s.id,
+      'source': 'reader',
+    });
   }
 
   // ------------------------------------------------------------------
@@ -575,9 +706,10 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
   }
 
   Future<void> _share() async {
-    await Clipboard.setData(ClipboardData(text: '${_s.title}\n${_s.summary}\n— 来自 English Reader'));
+    final s = S.of(context);
+    await Clipboard.setData(ClipboardData(text: s.shareText(_s.title, _s.summary)));
     app.analytics.track(Ev.articleShare, {'article_id': _s.id, 'channel': 'clipboard'});
-    if (mounted) _showToast('分享文案已复制到剪贴板');
+    if (mounted) _showToast(s.shareCopied);
   }
 
   void _openSibling(ArticleSummary target, String source) {
@@ -607,6 +739,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = S.of(context);
     final settings = app.settings;
     final media = MediaQuery.of(context);
     final article = _article;
@@ -649,13 +782,17 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                 0,
                 Row(
                   children: [
-                    _Chip(text: _s.category.label, color: p.accent),
+                    _Chip(text: s.category(_s.category), color: p.accent),
                     const SizedBox(width: 8),
-                    _Chip(text: kDifficultyLabels[_s.difficulty] ?? '', color: p.textSecondary),
+                    _Chip(text: s.difficulty(_s.difficulty), color: p.textSecondary),
                     const SizedBox(width: 10),
-                    Text(
-                      '${_s.wordCount} 词 · 约 ${_s.minutes} 分钟',
-                      style: TextStyle(fontSize: 12.5, color: p.textTertiary),
+                    Flexible(
+                      child: Text(
+                        s.wordsAndMinutes(_s.wordCount, _s.minutes),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12.5, color: p.textTertiary),
+                      ),
                     ),
                   ],
                 ),
@@ -685,7 +822,10 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
               const SizedBox(height: 12),
               _enter(
                 2,
-                Text('${_s.author} · ${_s.publishedAt}', style: TextStyle(fontSize: 12.5, color: p.textTertiary)),
+                Text(
+                  '${_s.author} · ${s.fullDate(_s.publishedDate)}',
+                  style: TextStyle(fontSize: 12.5, color: p.textTertiary),
+                ),
               ),
               const SizedBox(height: 18),
               _enter(2, Divider(height: 1, color: p.divider)),
@@ -707,9 +847,13 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                         lemmaOf: app.dictionary.lemmaOf,
                         collectedColor: p.accent,
                         highlightColor: p.highlight,
+                        markColor: p.marker,
                         activeWordIndex: _hit?.paragraphIndex == i ? _hit!.token.wordIndex : null,
+                        marks: _marks[i] ?? const [],
+                        markAnimation: _markAnim,
+                        animatingMark: _markAnimParagraph == i ? _markAnimSpan : null,
                         flash: _flash,
-                        flashWordIndex: _flashParagraph == i ? _flashWord : null,
+                        flashRange: _flashParagraph == i ? _flashRange : null,
                         onWordHit: _onWordHit,
                         onLongPressEnd: _onLongPressEnd,
                       ),
@@ -723,7 +867,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                   children: [
                     Expanded(
                       child: _SiblingCard(
-                        label: '上一篇',
+                        label: s.previousArticle,
                         article: _prev,
                         alignEnd: false,
                         onTap: _prev == null ? null : () => _openSibling(_prev!, 'prev'),
@@ -732,7 +876,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                     const SizedBox(width: 12),
                     Expanded(
                       child: _SiblingCard(
-                        label: '下一篇',
+                        label: s.nextArticle,
                         article: _next,
                         alignEnd: true,
                         onTap: _next == null ? null : () => _openSibling(_next!, 'next'),
@@ -818,6 +962,11 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                 entry: hitEntry,
                 collected: _collected.contains(hitEntry.word),
                 onToggleCollect: _toggleCollect,
+                sentenceMarked: () {
+                  final span = _sentenceSpan(hit.paragraphIndex, hit.token.start);
+                  return span != null && _isMarked(hit.paragraphIndex, span);
+                }(),
+                onToggleSentence: _toggleSentence,
               ),
             ),
           ],
@@ -853,6 +1002,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
   }
 
   Widget _buildTopBar(AppPalette p, MediaQueryData media) {
+    final s = S.of(context);
     return AnimatedBuilder(
       animation: Listenable.merge([_barOpacity, _progress, _check]),
       builder: (context, _) {
@@ -880,7 +1030,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                     color: fg,
                     background: buttonBg,
                     onTap: () => Navigator.of(context).maybePop(),
-                    tooltip: '返回',
+                    tooltip: s.back,
                   ),
                   Expanded(
                     child: Opacity(
@@ -926,12 +1076,29 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                     ),
                   ),
                   const SizedBox(width: 6),
+                  // 收藏文章：与单词收藏同一套形变弹跳 + 放射粒子，图标换成书签。
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(color: buttonBg, shape: BoxShape.circle),
+                    child: CollectButton(
+                      collected: _favorited,
+                      onChanged: _toggleFavorite,
+                      size: 21,
+                      extent: 38,
+                      icon: Icons.bookmark_border_rounded,
+                      activeIcon: Icons.bookmark_rounded,
+                      inactiveColor: fg,
+                      semanticLabel: s.favoriteArticle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   _BarButton(
                     icon: Icons.text_fields_rounded,
                     color: fg,
                     background: buttonBg,
                     onTap: () => ReaderSettingsSheet.show(context),
-                    tooltip: '阅读设置',
+                    tooltip: s.readerSettings,
                   ),
                   const SizedBox(width: 6),
                   _BarButton(
@@ -939,7 +1106,7 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
                     color: fg,
                     background: buttonBg,
                     onTap: _share,
-                    tooltip: '分享',
+                    tooltip: s.share,
                   ),
                 ],
               ),
@@ -1023,6 +1190,7 @@ class _FinishFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = S.of(context);
     return Center(
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 320),
@@ -1037,7 +1205,7 @@ class _FinishFooter extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              completed ? '已读完' : '读到这里就完成啦',
+              completed ? s.finished : s.finishHint,
               style: TextStyle(
                 fontSize: 13,
                 color: completed ? p.success : p.textTertiary,
@@ -1083,7 +1251,7 @@ class _SiblingCard extends StatelessWidget {
               const SizedBox(height: 4),
               Expanded(
                 child: Text(
-                  article?.title ?? '没有了',
+                  article?.title ?? S.of(context).noMore,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: alignEnd ? TextAlign.end : TextAlign.start,
@@ -1135,23 +1303,29 @@ class _FinishCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '读完啦！',
+                    S.of(context).finishTitle,
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: p.text),
                   ),
                   const SizedBox(height: 3),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text('连续打卡 ', style: TextStyle(fontSize: 13.5, color: p.textSecondary)),
-                      // key 带上天数：数值到位后重建一次，数字从 0 滚到目标值。
-                      CountUp(
-                        key: ValueKey(streak),
-                        value: streak,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFFF7A1A)),
-                      ),
-                      Text(' 天 · 本文累计 $minutes 分钟', style: TextStyle(fontSize: 13.5, color: p.textSecondary)),
-                    ],
+                  // 用 Text.rich + WidgetSpan 而不是 Row：英文文案更长，需要能自然折行。
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(text: S.of(context).streakPrefix),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.baseline,
+                          baseline: TextBaseline.alphabetic,
+                          // key 带上天数：数值到位后重建一次，数字从 0 滚到目标值。
+                          child: CountUp(
+                            key: ValueKey(streak),
+                            value: streak,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFFF7A1A)),
+                          ),
+                        ),
+                        TextSpan(text: S.of(context).streakSuffix(minutes)),
+                      ],
+                    ),
+                    style: TextStyle(fontSize: 13.5, color: p.textSecondary),
                   ),
                 ],
               ),

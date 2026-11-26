@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -46,6 +47,11 @@ class _SlidingTabsState extends State<SlidingTabs> with SingleTickerProviderStat
     if (old.labels.length != widget.labels.length) {
       _keys = List.generate(widget.labels.length, (_) => GlobalKey());
       WidgetsBinding.instance.addPostFrameCallback((_) => _snap());
+    } else if (!listEquals(old.labels, widget.labels)) {
+      // 文字变了（切换界面语言、标签里的计数变化）：各 Tab 宽度随之改变，需要重新测量。
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => old.index != widget.index ? _animateTo(widget.index) : _snap(),
+      );
     } else if (old.index != widget.index) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _animateTo(widget.index));
     }
