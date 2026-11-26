@@ -2,21 +2,19 @@ import 'dart:convert';
 
 import '../domain/reading_math.dart';
 
+/// 文章分类。展示名称见 `S.category`（随界面语言变化），这里只保留存储用的 key。
 enum ArticleCategory {
-  tech('tech', '科技'),
-  business('business', '商业'),
-  culture('culture', '文化'),
-  daily('daily', '日常');
+  tech('tech'),
+  business('business'),
+  culture('culture'),
+  daily('daily');
 
-  const ArticleCategory(this.key, this.label);
+  const ArticleCategory(this.key);
   final String key;
-  final String label;
 
   static ArticleCategory fromKey(String key) =>
       values.firstWhere((c) => c.key == key, orElse: () => ArticleCategory.daily);
 }
-
-const Map<int, String> kDifficultyLabels = {1: '初级', 2: '中级', 3: '高级'};
 
 /// 列表用的文章摘要（不含正文），附带当前用户的阅读状态。
 class ArticleSummary {
@@ -33,6 +31,7 @@ class ArticleSummary {
     this.maxProgress = 0,
     this.completed = false,
     this.lastReadAt,
+    this.favoritedAt,
   });
 
   final String id;
@@ -47,6 +46,13 @@ class ArticleSummary {
   final double maxProgress;
   final bool completed;
   final int? lastReadAt;
+
+  /// 当前用户收藏该文章的时间；未收藏为 null。
+  final int? favoritedAt;
+
+  bool get favorited => favoritedAt != null;
+
+  DateTime get publishedDate => DateTime.tryParse(publishedAt) ?? DateTime(1970);
 
   int get minutes => estimateMinutes(wordCount);
 
@@ -63,9 +69,10 @@ class ArticleSummary {
     maxProgress: (r['max_progress'] as num?)?.toDouble() ?? 0,
     completed: (r['completed'] as int? ?? 0) == 1,
     lastReadAt: r['last_read_at'] as int?,
+    favoritedAt: r['favorited_at'] as int?,
   );
 
-  ArticleSummary copyWith({double? maxProgress, bool? completed}) => ArticleSummary(
+  ArticleSummary copyWith({double? maxProgress, bool? completed, int? Function()? favoritedAt}) => ArticleSummary(
     id: id,
     title: title,
     titleZh: titleZh,
@@ -78,6 +85,7 @@ class ArticleSummary {
     maxProgress: maxProgress ?? this.maxProgress,
     completed: completed ?? this.completed,
     lastReadAt: lastReadAt,
+    favoritedAt: favoritedAt == null ? this.favoritedAt : favoritedAt(),
   );
 }
 
@@ -196,4 +204,38 @@ class AppUser {
   const AppUser({required this.id, required this.username});
   final String id;
   final String username;
+}
+
+/// 一条划线句子。区间是句子在段落中的字符偏移，与字号、排版无关。
+class SentenceMark {
+  const SentenceMark({
+    required this.id,
+    required this.articleId,
+    required this.paragraphIndex,
+    required this.start,
+    required this.end,
+    required this.text,
+    required this.createdAt,
+    this.articleTitle,
+  });
+
+  final String id;
+  final String articleId;
+  final int paragraphIndex;
+  final int start;
+  final int end;
+  final String text;
+  final int createdAt;
+  final String? articleTitle;
+
+  factory SentenceMark.fromRow(Map<String, Object?> r) => SentenceMark(
+    id: r['id'] as String,
+    articleId: r['article_id'] as String,
+    paragraphIndex: r['paragraph_index'] as int,
+    start: r['char_start'] as int,
+    end: r['char_end'] as int,
+    text: r['text'] as String,
+    createdAt: r['created_at'] as int,
+    articleTitle: r['article_title'] as String?,
+  );
 }

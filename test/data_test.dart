@@ -64,20 +64,36 @@ void main() {
       expect(await db.getVersion(), kSchemaVersion);
     });
 
-    test('升级：只执行尚未执行的版本，旧数据保留', () async {
+    test('真实升级 v1 → v2：老用户的进度和生词保留，新表可用', () async {
       final path = tempDbPath('upgrade');
+      // 只执行 v1 脚本，模拟「装着上一个版本的老用户」。
+      db = await openAppDatabase(factory: databaseFactoryFfi, path: path, version: 1, migrations: {1: kMigrations[1]!});
+      await importSeedIfNeeded(db, articlesJson: kTestArticles, dictionaryJson: kTestDictionary);
+      await ProgressRepository(db).save(snapshot(position: const ReadingPosition(1, 0.5)));
+      await db.close();
+
+      db = await openAppDatabase(factory: databaseFactoryFfi, path: path);
+      expect(await db.getVersion(), kSchemaVersion);
+      expect((await ProgressRepository(db).get('u1', 'a001'))!.position, const ReadingPosition(1, 0.5));
+      for (final table in ['article_favorites', 'sentence_marks', 'search_history']) {
+        expect(await db.query(table), isEmpty, reason: table);
+      }
+    });
+
+    test('后续版本：只执行尚未执行的脚本，旧数据保留', () async {
+      final path = tempDbPath('upgrade-next');
       db = await openTestDb(path: path);
       await writeMeta(db, 'k', 'v');
       await db.close();
-      // 模拟发布了 v2：新增一张表。
-      final v2 = {
+      final next = kSchemaVersion + 1;
+      final migrations = {
         ...kMigrations,
-        2: ['CREATE TABLE search_history (q TEXT PRIMARY KEY, ts INTEGER NOT NULL)'],
+        next: ['CREATE TABLE reading_goals (user_id TEXT PRIMARY KEY, minutes INTEGER NOT NULL)'],
       };
-      db = await openAppDatabase(factory: databaseFactoryFfi, path: path, version: 2, migrations: v2);
-      expect(await db.getVersion(), 2);
+      db = await openAppDatabase(factory: databaseFactoryFfi, path: path, version: next, migrations: migrations);
+      expect(await db.getVersion(), next);
       expect(await readMeta(db, 'k'), 'v');
-      await db.insert('search_history', {'q': 'x', 'ts': 1});
+      await db.insert('reading_goals', {'user_id': 'u1', 'minutes': 10});
     });
 
     test('种子导入幂等：重复启动不重复导入，版本变化才重新导入', () async {

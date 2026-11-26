@@ -5,6 +5,13 @@ import 'models.dart';
 const String _summaryColumns =
     'a.id, a.title, a.title_zh, a.category, a.difficulty, a.author, a.published_at, a.summary, a.word_count';
 
+/// 当前用户的阅读状态与收藏状态。
+const String _userColumns = 'p.max_progress, p.completed, p.last_read_at, f.created_at AS favorited_at';
+
+/// 两个 LEFT JOIN 各需要绑定一次 user_id。
+const String _userJoins = '''LEFT JOIN reading_progress p ON p.article_id = a.id AND p.user_id = ?
+      LEFT JOIN article_favorites f ON f.article_id = a.id AND f.user_id = ?''';
+
 class ArticleRepository {
   ArticleRepository(this._db);
   final Database _db;
@@ -18,7 +25,7 @@ class ArticleRepository {
     int offset = 0,
   }) async {
     final where = <String>[];
-    final args = <Object?>[userId];
+    final args = <Object?>[userId, userId];
     if (category != null) {
       where.add('a.category = ?');
       args.add(category.key);
@@ -31,9 +38,9 @@ class ArticleRepository {
       ..add(limit)
       ..add(offset);
     final rows = await _db.rawQuery('''
-      SELECT $_summaryColumns, p.max_progress, p.completed, p.last_read_at
+      SELECT $_summaryColumns, $_userColumns
       FROM articles a
-      LEFT JOIN reading_progress p ON p.article_id = a.id AND p.user_id = ?
+      $_userJoins
       ${where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}'}
       ORDER BY a.published_at DESC, a.id
       LIMIT ? OFFSET ?
@@ -44,12 +51,12 @@ class ArticleRepository {
   Future<Article?> getById(String id, {String userId = ''}) async {
     final rows = await _db.rawQuery(
       '''
-      SELECT $_summaryColumns, a.body_json, p.max_progress, p.completed, p.last_read_at
+      SELECT $_summaryColumns, a.body_json, $_userColumns
       FROM articles a
-      LEFT JOIN reading_progress p ON p.article_id = a.id AND p.user_id = ?
+      $_userJoins
       WHERE a.id = ?
     ''',
-      [userId, id],
+      [userId, userId, id],
     );
     return rows.isEmpty ? null : Article.fromRow(rows.first);
   }
@@ -57,12 +64,12 @@ class ArticleRepository {
   Future<ArticleSummary?> summaryById(String id, {String userId = ''}) async {
     final rows = await _db.rawQuery(
       '''
-      SELECT $_summaryColumns, p.max_progress, p.completed, p.last_read_at
+      SELECT $_summaryColumns, $_userColumns
       FROM articles a
-      LEFT JOIN reading_progress p ON p.article_id = a.id AND p.user_id = ?
+      $_userJoins
       WHERE a.id = ?
     ''',
-      [userId, id],
+      [userId, userId, id],
     );
     return rows.isEmpty ? null : ArticleSummary.fromRow(rows.first);
   }
@@ -97,8 +104,9 @@ class ArticleRepository {
   Future<ArticleSummary?> continueReading(String userId) async {
     final rows = await _db.rawQuery(
       '''
-      SELECT $_summaryColumns, p.max_progress, p.completed, p.last_read_at
+      SELECT $_summaryColumns, $_userColumns
       FROM reading_progress p JOIN articles a ON a.id = p.article_id
+      LEFT JOIN article_favorites f ON f.article_id = a.id AND f.user_id = p.user_id
       WHERE p.user_id = ? AND p.completed = 0 AND p.max_progress > 0.02
       ORDER BY p.last_read_at DESC LIMIT 1
     ''',

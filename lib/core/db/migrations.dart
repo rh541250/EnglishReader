@@ -5,7 +5,7 @@
 /// 整个升级过程在同一个事务内，失败则整体回滚、版本号不前进。
 ///
 /// 约定：已发布的版本脚本只增不改；新增字段 / 表一律追加新的版本号。
-const int kSchemaVersion = 1;
+const int kSchemaVersion = 2;
 
 const Map<int, List<String>> kMigrations = {
   1: [
@@ -176,6 +176,50 @@ const Map<int, List<String>> kMigrations = {
     CREATE TABLE meta (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    )
+    ''',
+  ],
+  // v2：文章收藏、句子划线、搜索历史。只新增表，不改动 v1 的任何结构，老用户升级时原有数据原样保留。
+  2: [
+    // 文章收藏：每个用户每篇文章最多一行，重复收藏幂等。
+    '''
+    CREATE TABLE article_favorites (
+      user_id    TEXT NOT NULL,
+      article_id TEXT NOT NULL REFERENCES articles(id),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, article_id)
+    )
+    ''',
+    // 「收藏的文章」按收藏时间倒序
+    'CREATE INDEX idx_favorites_user_created ON article_favorites(user_id, created_at DESC)',
+
+    // 句子划线：划线即收藏，出现在「笔记 · 句子」里。同一句只记一次。
+    '''
+    CREATE TABLE sentence_marks (
+      id              TEXT PRIMARY KEY,
+      user_id         TEXT NOT NULL,
+      article_id      TEXT NOT NULL REFERENCES articles(id),
+      paragraph_index INTEGER NOT NULL,
+      char_start      INTEGER NOT NULL,
+      char_end        INTEGER NOT NULL,
+      text            TEXT NOT NULL,
+      created_at      INTEGER NOT NULL,
+      version         INTEGER NOT NULL DEFAULT 1,
+      updated_at      INTEGER NOT NULL,
+      UNIQUE (user_id, article_id, paragraph_index, char_start)
+    )
+    ''',
+    // 笔记页列表；阅读页按文章取本篇的全部划线
+    'CREATE INDEX idx_marks_user_created ON sentence_marks(user_id, created_at DESC)',
+    'CREATE INDEX idx_marks_user_article ON sentence_marks(user_id, article_id)',
+
+    // 搜索历史：同一关键词只保留一行，再次搜索时刷新时间
+    '''
+    CREATE TABLE search_history (
+      user_id      TEXT NOT NULL,
+      query        TEXT NOT NULL,
+      last_used_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, query)
     )
     ''',
   ],
