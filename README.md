@@ -39,18 +39,20 @@
 </tr>
 </table>
 
-点击封面打开视频文件。
+点击封面打开视频文件。录屏录制于搜索、文章收藏、句子划线、多语言这几项加入之前，这些新功能见下方截图。
 
 ### 功能截图
 
 以下截图由端到端测试在 iOS 模拟器上自动截取（登录页为真机截图）。图中的十字圆圈是测试框架画的触点标记，不属于 App 界面。
 
 <table>
-<tr><td align="center"><img src="docs/screenshots/00_login.png" width="190"><br>登录</td><td align="center"><img src="docs/screenshots/01_list.png" width="190"><br>文章列表</td><td align="center"><img src="docs/screenshots/02_tab_sliding.png" width="190"><br>Tab 指示器滑动中</td><td align="center"><img src="docs/screenshots/03_hero_mid_flight.png" width="190"><br>共享元素飞行中</td></tr>
-<tr><td align="center"><img src="docs/screenshots/04_reader_top.png" width="190"><br>阅读页</td><td align="center"><img src="docs/screenshots/05_word_popup.png" width="190"><br>长按取词</td><td align="center"><img src="docs/screenshots/06_collect_bounce.png" width="190"><br>收藏按钮弹跳</td><td align="center"><img src="docs/screenshots/07_reader_mid.png" width="190"><br>阅读中（进度环 / 进度条）</td></tr>
-<tr><td align="center"><img src="docs/screenshots/08_swipe_back_dragging.png" width="190"><br>跟手右滑返回</td><td align="center"><img src="docs/screenshots/09_list_continue_card.png" width="190"><br>继续阅读与卡片进度环</td><td align="center"><img src="docs/screenshots/10_restored_position.png" width="190"><br>重进后恢复位置</td><td align="center"><img src="docs/screenshots/11_finished_confetti.png" width="190"><br>读完：彩纸</td></tr>
-<tr><td align="center"><img src="docs/screenshots/12_finish_card.png" width="190"><br>读完：打卡卡片</td><td align="center"><img src="docs/screenshots/13_vocab.png" width="190"><br>生词本</td><td align="center"><img src="docs/screenshots/14_jump_back_to_source.png" width="190"><br>跳回原文并高亮</td><td align="center"><img src="docs/screenshots/15_profile.png" width="190"><br>我的</td></tr>
-<tr><td align="center"><img src="docs/screenshots/16_debug_panel.png" width="190"><br>埋点调试面板</td><td></td><td></td><td></td></tr>
+<tr><td align="center"><img src="docs/screenshots/00_login.png" width="190"><br>登录</td><td align="center"><img src="docs/screenshots/01_list.png" width="190"><br>列表：搜索栏、发布时间</td><td align="center"><img src="docs/screenshots/02_tab_sliding.png" width="190"><br>Tab 指示器滑动中</td><td align="center"><img src="docs/screenshots/03_hero_mid_flight.png" width="190"><br>共享元素飞行中</td></tr>
+<tr><td align="center"><img src="docs/screenshots/04_reader_top.png" width="190"><br>阅读页</td><td align="center"><img src="docs/screenshots/04b_favorite_bounce.png" width="190"><br>收藏文章：书签弹跳</td><td align="center"><img src="docs/screenshots/05_word_popup.png" width="190"><br>长按取词</td><td align="center"><img src="docs/screenshots/06_collect_bounce.png" width="190"><br>收藏单词</td></tr>
+<tr><td align="center"><img src="docs/screenshots/06b_sentence_marking.png" width="190"><br>划线：荧光笔涂出中</td><td align="center"><img src="docs/screenshots/06c_sentence_marked.png" width="190"><br>划线完成</td><td align="center"><img src="docs/screenshots/07_reader_mid.png" width="190"><br>阅读中（进度环 / 进度条）</td><td align="center"><img src="docs/screenshots/08_swipe_back_dragging.png" width="190"><br>跟手右滑返回</td></tr>
+<tr><td align="center"><img src="docs/screenshots/09_list_continue_card.png" width="190"><br>继续阅读、收藏角标</td><td align="center"><img src="docs/screenshots/10_restored_position.png" width="190"><br>重进后恢复位置</td><td align="center"><img src="docs/screenshots/11_finished_confetti.png" width="190"><br>读完：彩纸</td><td align="center"><img src="docs/screenshots/12_finish_card.png" width="190"><br>读完：打卡卡片</td></tr>
+<tr><td align="center"><img src="docs/screenshots/13_notebook_words.png" width="190"><br>笔记 · 单词</td><td align="center"><img src="docs/screenshots/14_jump_back_to_source.png" width="190"><br>单词跳回原文</td><td align="center"><img src="docs/screenshots/14b_notebook_sentences.png" width="190"><br>笔记 · 句子</td><td align="center"><img src="docs/screenshots/14c_jump_to_sentence.png" width="190"><br>句子跳回原文</td></tr>
+<tr><td align="center"><img src="docs/screenshots/15a_search_flight.png" width="190"><br>搜索栏共享元素</td><td align="center"><img src="docs/screenshots/15b_search_results.png" width="190"><br>搜索结果高亮</td><td align="center"><img src="docs/screenshots/15c_search_jump.png" width="190"><br>定位到正文命中</td><td align="center"><img src="docs/screenshots/15d_search_history.png" width="190"><br>搜索历史</td></tr>
+<tr><td align="center"><img src="docs/screenshots/16_profile.png" width="190"><br>我的</td><td align="center"><img src="docs/screenshots/16b_favorites.png" width="190"><br>收藏的文章</td><td align="center"><img src="docs/screenshots/16c_profile_en.png" width="190"><br>切换为英文</td><td align="center"><img src="docs/screenshots/17_debug_panel.png" width="190"><br>埋点调试面板</td></tr>
 </table>
 
 ## 2. 功能对照
@@ -58,17 +60,27 @@
 | 题目要求 | 实现 | 代码位置 |
 |---|---|---|
 | 登录 / 注册、Token 鉴权、登录态持久化 | 本地 Mock 账号 + HMAC 签名 Token，重启自动恢复 | `lib/data/auth_service.dart` |
-| 列表：分类、难度、下拉刷新、分页、骨架屏 | 4 个分类 × 3 档难度，每页 8 篇，按需构建 | `lib/features/articles/` |
+| 列表：分类、难度、下拉刷新、分页、骨架屏 | 4 个分类 × 3 档难度，每页 8 篇，按需构建；卡片显示发布时间 | `lib/features/articles/` |
 | 阅读：排版、主题、上下篇 | 字号 15–26、行距 1.4–2.1，日间 / 护眼 / 夜间 | `lib/features/reader/` |
 | 阅读进度：位置、完成、时长、精确恢复 | 记录「段落序号 + 段内比例」，改字号后仍能回到同一句话 | `lib/domain/reading_math.dart` |
-| 生词本：长按取词、查看、删除、跳回原文 | 取词即查本地词表；生词记录出处的段落与词序号 | `lib/features/reader/paragraph_view.dart` |
+| 生词本：长按取词、查看、删除、跳回原文 | 取词即查本地词表；生词记录出处的段落与词序号；生词本已并入「笔记」 | `lib/features/reader/paragraph_view.dart` |
+| （扩展）句子划线 | 划线即收藏，出现在「笔记 · 句子」，可跳回原文 | `lib/data/sentence_repository.dart` |
+| （扩展）文章收藏 | 阅读页书签收藏；列表卡片角标；「我的 → 收藏的文章」按收藏时间倒序 | `lib/data/favorite_repository.dart` |
+| （加分项）搜索 | 标题 + 全文、多词、关键词高亮、命中定位、搜索历史 | `lib/features/search/` |
+| （扩展）多语言 | 简体中文 / English / 跟随系统，入口在「我的」 | `lib/l10n/strings.dart` |
 | 离线优先：SQLite 建表、种子导入 | 首次启动导入 24 篇文章和 1973 个词条 | `lib/core/db/` |
 | 数据一致性：写入幂等、杀进程不丢 | 以绝对值快照写入，开启 WAL，最多丢失 0.8 秒 | `lib/data/progress_repository.dart` |
 | 动效 4 项 | 全部完成 | `lib/motion/` |
 | 埋点方案（加分项） | 事件模型、本地队列、退避重试、调试面板、3 个分析查询 | `lib/analytics/` |
 | Git + CI | GitHub Actions：格式检查、静态分析、单元测试 | `.github/workflows/ci.yml` |
 
-未做的加分项：小程序 / H5、推送与每日提醒、全文搜索、LLM 接入。
+未做的加分项：小程序 / H5、推送与每日提醒、LLM 接入。
+
+几处设计取舍：
+- **划线即收藏。** 句子不分「划线」和「收藏」两个动作，避免出现「划了线但没收藏」「收藏了但正文里看不出」两种中间状态。
+- **划线复用长按手势。** 入口是长按取词气泡里的「划线本句」，不再新增一个手势去和滚动、取词竞争。
+- **笔记与收藏分开。** 单词和句子是从正文里摘出的学习内容，放在「笔记」；收藏针对整篇文章，入口在「我的」。
+- **多语言只翻译界面。** 文章正文、中文标题和释义属于学习内容，不随语言切换；调试面板是开发者工具，保持中文。
 
 ## 3. 本地启动
 
@@ -119,7 +131,7 @@ flutter run -d <设备 ID>          # 用 flutter devices 查看设备 ID
 ### 测试
 
 ```bash
-flutter analyze && flutter test          # 静态分析与 52 个单元测试
+flutter analyze && flutter test          # 静态分析与 66 个单元测试
 tool/analytics_report.sh                 # 对模拟器里 App 的数据库运行埋点分析查询
 flutter drive --driver=test_driver/integration_test.dart \
   --target=integration_test/app_flow_test.dart -d <设备 ID>   # 端到端主链路，截图输出到 build/screenshots/
@@ -128,7 +140,8 @@ flutter drive --driver=test_driver/integration_test.dart \
 ## 4. 架构说明
 
 ```
-features/   页面：auth · articles · reader · vocabulary · profile · debug
+features/   页面：auth · articles · search · reader · notebook · favorites · profile · debug
+l10n/       界面文案（中 / 英）
 motion/     动效组件：路由、入场、微光、进度环、彩纸…
 ────────────────────────────────────────────────────────────
 domain/     纯逻辑（不依赖 Flutter 和 IO）：分词 · 阅读位置换算 · 有效时长 · 打卡
@@ -140,6 +153,7 @@ core/db/    开库 · 迁移 · 种子导入 → SQLite（WAL）
 
 - **依赖单向向下**。`domain/` 不依赖 Flutter，阅读位置、计时、打卡等核心算法都用纯单元测试覆盖。
 - **状态管理**：SQLite 是唯一的数据来源。`AppScope` 在冷启动时组装所有仓储和服务，页面直接查询仓储。仓储在数据变化时递增 `revision`，监听它的页面重新查询。例如从阅读页返回后，列表卡片上的进度环会补间到新值。
+- **多语言**：手写的抽象类 `S` 加上中、英两份实现，经 `LocalizationsDelegate` 注入；页面通过 `S.of(context)` 取文案。没有用 ARB 代码生成：任一语言漏写条目都会直接编译失败，比运行时缺 key 更早暴露问题。系统控件的文案由 `GlobalMaterialLocalizations` 提供。
 - **冷启动顺序**：开库并迁移 → 导入种子（仅首次）→ 词表载入内存 → 校验 Token、恢复登录态 → 记录 `app_open` → 补报上次遗留的事件。
 
 ### 数据流
@@ -160,6 +174,9 @@ users 1─n reading_progress n─1 articles
 users 1─n reading_sessions n─1 articles
 users 1─n vocabulary       n─1 articles     （生词 → 原文出处）
 dictionary 1─n dictionary_forms              （running → run）
+users 1─n article_favorites n─1 articles     （v2）
+users 1─n sentence_marks    n─1 articles     （v2，划线 → 原文出处）
+users 1─n search_history                     （v2）
 event_queue 独立；upload_log 按 batch_id 关联一次上报
 ```
 
@@ -211,6 +228,19 @@ CREATE TABLE event_queue (                    -- 埋点队列；status：0 待�
 );
 ```
 
+v2 新增的三张表：
+
+```sql
+CREATE TABLE article_favorites (user_id TEXT NOT NULL, article_id TEXT NOT NULL REFERENCES articles(id),
+  created_at INTEGER NOT NULL, PRIMARY KEY (user_id, article_id));
+CREATE TABLE sentence_marks (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, article_id TEXT NOT NULL REFERENCES articles(id),
+  paragraph_index INTEGER NOT NULL, char_start INTEGER NOT NULL, char_end INTEGER NOT NULL, text TEXT NOT NULL,
+  created_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL,
+  UNIQUE (user_id, article_id, paragraph_index, char_start));
+CREATE TABLE search_history (user_id TEXT NOT NULL, query TEXT NOT NULL, last_used_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, query));
+```
+
 其余的表：
 - `articles`：正文以段落数组形式存放；
 - `reading_sessions`：按天统计阅读时长和打卡；
@@ -226,11 +256,15 @@ CREATE TABLE event_queue (                    -- 埋点队列；status：0 待�
 | `articles(difficulty)` | 难度筛选 |
 | `reading_progress(user_id, last_read_at DESC)` | 继续阅读 |
 | `reading_sessions(user_id, day)` | 近 7 日阅读时长、打卡天数 |
-| `vocabulary(user_id, created_at DESC)` | 生词本列表 |
+| `vocabulary(user_id, created_at DESC)` | 笔记 · 单词 |
+| `sentence_marks(user_id, created_at DESC)`、`sentence_marks(user_id, article_id)` | 笔记 · 句子；阅读页取本篇划线 |
+| `article_favorites(user_id, created_at DESC)` | 收藏的文章 |
 | `event_queue(status, next_retry_at, ts)` | 上报器取批 |
 | `event_queue(name, ts)` | 分析查询 |
 
-**迁移策略。** 版本号存放在 `PRAGMA user_version`。打开数据库时依次执行未执行过的版本脚本，整个过程在一个事务里，失败则整体回滚、版本号不前进。已发布的脚本只增不改。单元测试覆盖了 v1 → v2 的升级路径。
+**迁移策略。** 版本号存放在 `PRAGMA user_version`。打开数据库时依次执行尚未执行过的版本脚本，整个过程在一个事务里，失败则整体回滚、版本号不前进。已发布的脚本只增不改。本次功能就是一次真实的升级：v2 只新增三张表，不改动 v1 的结构。单元测试用 v1 建库、写入阅读进度，再升级到 v2，验证老数据保留、新表可用。
+
+**搜索为什么用 LIKE 而不是 FTS5。** Android 系统自带的 SQLite 不保证编译了 FTS5，内置文章只有几十篇，LIKE 全表扫描在毫秒级。文章量上千后，再加一张 FTS 虚表并在迁移里回填。
 
 ## 7. 离线优先与数据一致性
 
@@ -257,7 +291,7 @@ WHERE user_id = ? AND article_id = ?;         -- 未命中时 INSERT，与 UPDAT
 
 - **上行**：本地改动写入与 `event_queue` 同构的变更日志表，复用同一套「取批 → 上报 → 退避重试」机制，服务端按变更 ID 去重。
 - **阅读进度**：按字段合并。`max_progress`、`completed`、`duration_ms` 取两端的较大值（满足交换律，可以安全重放）；当前位置按 `last_read_at` 采用 last-write-wins。
-- **生词本**：按集合语义合并，新增取并集；删除记墓碑（`deleted_at`），与新增按时间戳比较。
+- **生词、划线、收藏**：按集合语义合并，新增取并集；删除记墓碑（`deleted_at`），与新增按时间戳比较。
 - **文章**：只读数据，按服务端 `version` 单向下行覆盖。
 
 ## 8. Mock 鉴权的校验方式
@@ -289,7 +323,7 @@ WHERE user_id = ? AND article_id = ?;         -- 未命中时 INSERT，与 UPDAT
 | 1 | 标题共享元素 | 同上 | `Hero`，飞行中不重排文字 | 两端排版各自冻结后按宽度缩放叠放；列表侧在 0–45% 淡出，详情侧在 20–70% 淡入 |
 | 1 | 页面转场 | 全局 | 自定义 `PageRoute` | 进入 460ms、返回 380ms；下层页面视差左移 25% 并压暗 16% |
 | 1 | 跟手右滑返回 | 阅读页等二级页面 | 自定义手势，直接改写路由动画进度 | 全屏宽度都可发起；松手速度 ≥ 1 屏宽 / 秒时按方向判定，否则看是否过半；取消时用 `snappy` 带松手速度回弹 |
-| 2 | 列表交错入场 | 文章列表、生词本 | `StaggerController` | 每项延迟 55ms（最多 10 级），420ms，淡入 + 上移 22px；滚动后才构建的卡片不排队，已入场的卡片不重播 |
+| 2 | 列表交错入场 | 文章列表、笔记、搜索结果、收藏 | `StaggerController` | 每项延迟 55ms（最多 10 级），420ms，淡入 + 上移 22px；滚动后才构建的卡片不排队，已入场的卡片不重播 |
 | 2 | 正文首屏入场 | 阅读页 | 单个控制器驱动多个区块 | 转场开始 160ms 后启动，每块延迟 70ms，淡入 + 上移 18px |
 | 3 | 进度条 / 进度环 | 阅读页顶栏 | 由滚动位置逐帧驱动，`CustomPainter` | 无补间，不会滞后；读完后进度环闭合，用 520ms 描出对勾 |
 | 3 | 卡片进度环 | 文章列表 | `TweenAnimationBuilder` | 数值变化时 600ms 推进到新值 |
@@ -297,6 +331,11 @@ WHERE user_id = ? AND article_id = ?;         -- 未命中时 INSERT，与 UPDAT
 | 4 | 收藏按钮形变弹跳 | 取词气泡 | 620ms 编排 + 放射粒子 | scaleX 1 → 1.25 → 0.82 → 1，scaleY 1 → 0.70 → 1.32 → 1，最后用 `elasticOut` 落定 |
 | 4 | Tab 指示器滑动 | 文章列表 | 实测 Tab 位置，自绘胶囊 | 360ms；前缘在 0–65% 先走、后缘在 35–100% 后走，中途被拉长；胶囊下方的文字反色 |
 | 4 | 骨架屏微光 | 文章列表 | 整块骨架共用一个 `ShaderMask` | 1.3 秒一个周期 |
+| 1 | 搜索栏共享元素 | 列表 → 搜索页 | `Hero` + 淡入路由 | 页面只淡入并上移 12px，不叠加横向滑入，避免与搜索栏的纵向飞行打架；飞行中渲染静态外观，不复制输入框；转场结束后再弹出键盘 |
+| 3 | 句子划线 | 阅读页 | `CustomPainter` 画荧光笔色带 | 460ms `easeInOutCubic`；按总长度从首行左端涂到末行右端，跨行时上一行涂满才进入下一行；取消划线时沿原路擦回 |
+| 3 | 定位闪烁 | 阅读页 | 同一个 painter 闪烁目标区间 | 滚到视口 38% 处后闪烁 3 次；笔记跳回原文、搜索命中共用 |
+| 4 | 文章收藏 | 阅读页顶栏、列表卡片 | 复用收藏按钮的形变弹跳，图标换成书签；卡片角标 `AnimatedScale` | 角标出现 420ms `easeOutBack`，收起用 `easeInCubic` |
+| 4 | 笔记分栏切换 | 笔记 | 复用 Tab 指示器；内容沿切换方向淡入并滑入 6% | 180ms；标签里的计数变化、切换语言后指示器会重新测量 |
 | 4 | 其它 | 各页面 | 取词气泡弹出、按压缩放、登录错误抖动、主题颜色补间 | 弹簧缩放 0.82 → 1、按下缩放到 0.97、衰减正弦 420ms、主题补间 260ms |
 
 **性能取舍。** 入场、按压、转场只修改 `Opacity` 和 `Transform`，不触发布局。彩纸、进度环、指示器、取词高亮都用 `CustomPainter` 实现，每帧只绘制一次，不重建 Widget。骨架屏整块只有一个着色器。阅读页顶栏局部重建，滚动时正文不重建。
@@ -372,7 +411,11 @@ debug 模式和模拟器的数据没有参考价值：debug 模式包含断言�
 | `word_collect` / `word_remove` | 收藏 / 删除生词 | `article_id`、`word` / `word` | `paragraph_index`、`source` |
 | `article_share` | 分享 | `article_id` | `channel` |
 | `offline_hit` | 无网络时由本地库提供列表或文章 | `resource` | `article_id` |
-| `reader_setting_change` | 调整字号 / 行距 / 主题 | `key`、`value` | |
+| `reader_setting_change` | 调整字号 / 行距 / 主题 / 界面语言 | `key`、`value` | |
+| `search_submit` | 确认一次搜索：回车、点搜索历史，或从结果里打开文章（边输入边出结果的中间状态不算） | `keyword`、`result_count` | `source` |
+| `search_result_click` | 点击搜索结果 | `article_id`、`position`、`keyword` | `hit`（title / body） |
+| `article_favorite` / `article_unfavorite` | 收藏 / 取消收藏文章 | `article_id` | `source` |
+| `sentence_mark` / `sentence_unmark` | 划线 / 取消划线 | `article_id`、`paragraph_index` | `length` / `source` |
 
 ### 上报策略
 
@@ -448,7 +491,7 @@ App 内为兼容没有 JSON1 扩展的旧版 Android 系统 SQLite，采用「SQ
 
 - **Git**：按「工程骨架 → 数据库 → 领域逻辑 → 数据层 → 埋点 → 动效 → 页面 → 测试 → CI → 文档」分步提交。
 - **CI**（`.github/workflows/ci.yml`）：push / PR 时依次执行 `dart format --set-exit-if-changed`、`flutter analyze --fatal-infos`、`flutter test`。
-- **测试**：52 个单元测试 + 1 个端到端主链路测试。
+- **测试**：66 个单元测试 + 1 个端到端主链路测试。
 
 | 测试文件 | 覆盖 |
 |---|---|
@@ -456,7 +499,8 @@ App 内为兼容没有 JSON1 扩展的旧版 Android 系统 SQLite，采用「SQ
 | `test/data_test.dart` | 迁移升级、种子导入幂等、分页与上下篇、进度幂等 / 不回退 / 杀进程恢复、生词去重、鉴权 |
 | `test/analytics_test.dart` | 事件模型、入队幂等、分批、退避重试、离线补报、冷启动补报与去重、会话切分、3 个查询 |
 | `test/seed_data_test.dart` | 种子数据结构合法、可导入、词表覆盖正文中的每个词 |
-| `integration_test/app_flow_test.dart` | 登录 → 转场 → 取词 → 位置恢复 → 改字号 → 读完 → 手势返回 → 跳回原文 → 埋点入队 |
+| `test/features_v2_test.dart` | 分句、搜索词匹配与片段、发布时间文案、语言归一、收藏 / 划线 / 搜索 / 搜索历史仓储 |
+| `integration_test/app_flow_test.dart` | 登录 → 转场 → 收藏文章 → 取词 → 划线 → 位置恢复 → 改字号 → 读完 → 手势返回 → 笔记跳回原文 → 搜索定位 → 收藏的文章 → 切换语言 → 埋点入队 |
 
 ## 14. 打包、签名与上架
 
@@ -485,10 +529,11 @@ App 内为兼容没有 JSON1 扩展的旧版 Android 系统 SQLite，采用「SQ
 - 分享只复制文案到剪贴板。封面是按文章 ID 生成的矢量图。
 - 跨零点的一次阅读，时长全部计入开始那一天。
 - 词表只保证覆盖内置文章。
+- 划线以整句为单位，分句规则覆盖内置文章（含常见缩写），没有处理所有英文边界情况。
 - 正文一次性布局全部段落，适合两千词以内的文章；更长的文章需要改成懒加载，并用 `TextPainter` 预先计算段落高度。
 - 国行 iOS 首次启动会弹出「允许使用无线数据」，起因是联网探测和埋点上报；拒绝后不影响离线阅读。
 
 **后续优化**
 - 定位真机上个别超过 16ms 的帧：把阅读页首屏构建拆到多帧，或对非首屏段落延迟构建。
-- 取词放大镜、短语选择；生词本复习模式（间隔重复）。
-- 用 SQLite FTS5 做全文搜索；本地通知做每日提醒。
+- 取词放大镜、自由选择任意片段划线；笔记里的单词复习模式（间隔重复）。
+- 文章量增大后改用 FTS 做搜索；本地通知做每日提醒。
