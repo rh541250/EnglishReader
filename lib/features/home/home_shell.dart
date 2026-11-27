@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -39,7 +41,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     return Scaffold(
-      body: _FadeThrough(
+      body: FadeThrough(
         index: _index,
         children: [
           const ArticleListPage(),
@@ -62,39 +64,90 @@ class _HomeShellState extends State<HomeShell> {
 
 /// 页面切换：旧页淡出，新页从 0.97 倍淡入放大（Material 的 fade-through 模式）。
 ///
-/// 已创建的页面都保留在树里（保留滚动位置）；未选中的页面关闭 [TickerMode]，
-/// 不在后台跑动画，也不接收点击。
-class _FadeThrough extends StatelessWidget {
-  const _FadeThrough({required this.index, required this.children});
+/// 已创建的页面都保留在树里（保留滚动位置）。切换时，旧页在淡出期间保持动画运行；
+/// 淡出结束后用 [Offstage] 隐藏，不再绘制、不接收点击，也不在后台跑动画。
+/// （不能在切换的同一帧就关掉旧页的 TickerMode：那样淡出动画会被冻结在不透明状态，
+/// 旧页会一直盖在新页上面。）
+class FadeThrough extends StatefulWidget {
+  const FadeThrough({super.key, required this.index, required this.children});
 
   final int index;
   final List<Widget> children;
 
   @override
+  State<FadeThrough> createState() => FadeThroughState();
+}
+
+class FadeThroughState extends State<FadeThrough> {
+  static const Duration _fade = Duration(milliseconds: 300);
+
+  /// 正在淡出的页面（动画结束前仍需要可见）。
+  int? _leaving;
+  Timer? _timer;
+
+  @override
+  void didUpdateWidget(FadeThrough oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index != widget.index) {
+      _leaving = oldWidget.index;
+      _timer?.cancel();
+      _timer = Timer(_fade, () {
+        if (mounted) setState(() => _leaving = null);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        for (var i = 0; i < children.length; i++)
+        for (var i = 0; i < widget.children.length; i++)
           Positioned.fill(
-            child: IgnorePointer(
-              ignoring: i != index,
-              child: TickerMode(
-                enabled: i == index,
-                child: AnimatedOpacity(
-                  opacity: i == index ? 1 : 0,
-                  duration: const Duration(milliseconds: 280),
-                  curve: Motion.standard,
-                  child: AnimatedScale(
-                    scale: i == index ? 1 : 0.97,
-                    duration: const Duration(milliseconds: 360),
-                    curve: Motion.enter,
-                    child: children[i],
-                  ),
-                ),
-              ),
+            child: _Page(
+              active: i == widget.index,
+              visible: i == widget.index || i == _leaving,
+              child: widget.children[i],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _Page extends StatelessWidget {
+  const _Page({required this.active, required this.visible, required this.child});
+
+  final bool active;
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Offstage(
+      offstage: !visible,
+      child: IgnorePointer(
+        ignoring: !active,
+        child: TickerMode(
+          enabled: visible,
+          child: AnimatedOpacity(
+            opacity: active ? 1 : 0,
+            duration: const Duration(milliseconds: 280),
+            curve: Motion.standard,
+            child: AnimatedScale(
+              scale: active ? 1 : 0.97,
+              duration: const Duration(milliseconds: 360),
+              curve: Motion.enter,
+              child: child,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
