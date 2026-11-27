@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
@@ -25,6 +26,7 @@ import '../../motion/progress_ring.dart';
 import '../../widgets/article_cover.dart';
 import 'paragraph_view.dart';
 import 'reader_settings_sheet.dart';
+import 'word_fly.dart';
 import 'word_popup.dart';
 
 /// 打开文章时要定位并闪烁提示的位置：笔记里的单词 / 句子「跳回原文」、搜索命中的正文片段。
@@ -59,6 +61,24 @@ class ReaderPage extends StatefulWidget {
     return AppPageRoute<void>(
       settings: RouteSettings(name: 'reader/${summary.id}'),
       builder: (_) => ReaderPage(summary: summary, source: source, heroScope: heroScope, target: target),
+    );
+  }
+
+  /// 上拉进入下一篇用的路由：下一篇从底部推上来，而不是横向滑入。
+  static Route<void> routeUp({required ArticleSummary summary, required String source}) {
+    return PageRouteBuilder<void>(
+      settings: RouteSettings(name: 'reader/${summary.id}'),
+      transitionDuration: const Duration(milliseconds: 460),
+      reverseTransitionDuration: const Duration(milliseconds: 380),
+      pageBuilder: (context, animation, secondaryAnimation) =>
+          ReaderPage(summary: summary, source: source, heroScope: 'next'),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Motion.page);
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(curved),
+          child: child,
+        );
+      },
     );
   }
 
@@ -119,6 +139,26 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
   Timer? _saveTimer;
   Timer? _heartbeat;
   bool _inBackground = false;
+
+  // ---- 沉浸式顶栏 / 封面视差 ----
+  static const double _parallaxMargin = 125;
+  final ValueNotifier<double> _scrollPx = ValueNotifier(0);
+  final ValueNotifier<bool> _barHidden = ValueNotifier(false);
+  double _lastPx = 0;
+
+  // ---- 上拉进入下一篇 ----
+  static const double _pullTrigger = 120;
+  final ValueNotifier<double> _pull = ValueNotifier(0);
+  bool _pullHapticFired = false;
+  double _dragPull = 0;
+  bool _dragging = false;
+
+  /// 本次拖动开始时是否已经在底部：只有这种拖动才算「上拉」，从中间甩到底部不算。
+  bool _dragBeganAtEnd = false;
+  bool _navigating = false;
+
+  // ---- 收藏单词的飞行反馈 ----
+  final GlobalKey<WordFlyLayerState> _flyKey = GlobalKey<WordFlyLayerState>();
 
   // ---- 取词 ----
   WordHit? _hit;
@@ -184,6 +224,9 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     _progress.dispose();
     _barOpacity.dispose();
     _coverVisible.dispose();
+    _scrollPx.dispose();
+    _barHidden.dispose();
+    _pull.dispose();
     super.dispose();
   }
 
@@ -400,8 +443,20 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
     final barStart = _coverHeight - _anchorInset - 24;
     _barOpacity.value = ((pixels - barStart) / 36).clamp(0.0, 1.0);
     _coverVisible.value = pixels < _coverHeight * 0.6;
+    _scrollPx.value = pixels;
 
-    if (!_ready || _programmaticScroll) return;
+    if (!_ready || _programmaticScroll) {
+      _lastPx = pixels;
+      return;
+    }
+    // 沉浸式顶栏：下滑时收起，上滑时出现；封面区域内始终显示。
+    final delta = pixels - _lastPx;
+    _lastPx = pixels;
+    if (delta > 6 && pixels > _coverHeight) {
+      _barHidden.value = true;
+    } else if (delta < -6) {
+      _barHidden.value = false;
+    }
     _timer.interact(_now);
     if (_hit != null && !_pressing) _dismissPopup();
 
@@ -562,6 +617,10 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
       _collected = collect ? {..._collected, entry.word} : ({..._collected}..remove(entry.word));
     });
     if (collect) {
+      final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+      if (stackBox != null) {
+        _flyKey.currentState?.fly(stackBox.globalToLocal(hit.globalRect.center), hit.token.text);
+      }
       await app.vocab.add(
         userId: uid,
         entry: entry,
@@ -758,20 +817,49 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
       key: _contentKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          height: _coverHeight,
-          width: double.infinity,
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _coverVisible,
-            builder: (context, visible, _) => CoverHero(
-              tag: _coverTag,
-              articleId: _s.id,
-              category: _s.category,
-              radius: 0,
-              // 封面滚出屏幕后关闭共享元素：否则返回时封面会从屏幕外飞回卡片。
-              enabled: visible,
-            ),
-          ),
+        // 封面视差：上滑时图像以一半速度移动并逐渐压暗；下拉时整块拉伸。
+        ValueListenableBuilder<double>(
+          valueListenable: _scrollPx,
+          builder: (context, px, _) {
+            final stretch = px < 0 ? -px : 0.0;
+            final shift = px > 0 ? math.min(px * 0.5, _parallaxMargin) : 0.0;
+            final dim = px > 0 ? math.min(px / _coverHeight, 1.0) * 0.35 : 0.0;
+            return SizedBox(
+              height: _coverHeight + stretch,
+              width: double.infinity,
+              child: ClipRect(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 图像比槽位高出 2 × _parallaxMargin，无论怎样移动都盖住槽位。
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: shift - _parallaxMargin,
+                      height: _coverHeight + 2 * _parallaxMargin + stretch,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _coverVisible,
+                        builder: (context, visible, _) => CoverHero(
+                          tag: _coverTag,
+                          articleId: _s.id,
+                          category: _s.category,
+                          radius: 0,
+                          // 封面滚出屏幕后关闭共享元素：否则返回时封面会从屏幕外飞回卡片。
+                          enabled: visible,
+                        ),
+                      ),
+                    ),
+                    if (dim > 0)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: ColoredBox(color: Colors.black.withValues(alpha: dim)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 20, 22, 0),
@@ -902,15 +990,35 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
         key: _stackKey,
         children: [
           Positioned.fill(
-            child: SingleChildScrollView(
-              controller: _scroll,
-              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-              child: content,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onPullNotification,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                child: content,
+              ),
             ),
           ),
 
-          // 顶栏 + 进度条
-          Positioned(top: 0, left: 0, right: 0, child: _buildTopBar(p, media)),
+          // 底部上拉进入下一篇的提示
+          Positioned(left: 0, right: 0, bottom: 0, child: _buildPullIndicator(p, S.of(context), media)),
+
+          // 顶栏 + 进度条（沉浸式：下滑时滑出屏幕）
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _barHidden,
+              builder: (context, hidden, child) => AnimatedSlide(
+                offset: hidden ? const Offset(0, -1) : Offset.zero,
+                duration: Motion.entrance,
+                curve: Motion.standard,
+                child: child,
+              ),
+              child: _buildTopBar(p, media),
+            ),
+          ),
 
           // 轻提示
           Positioned(
@@ -971,25 +1079,33 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
             ),
           ],
 
+          // 收藏单词的飞行反馈（不挡操作）。
+          Positioned.fill(child: WordFlyLayer(key: _flyKey)),
+
           // 读完庆祝卡片
           Positioned(
             left: 16,
             right: 16,
             bottom: media.padding.bottom + 16,
-            child: AnimatedBuilder(
-              animation: _finishCard,
-              builder: (context, child) {
-                final v = _finishCard.value;
-                if (v <= 0.001) return const SizedBox.shrink();
-                return Opacity(
-                  opacity: v.clamp(0.0, 1.0),
-                  child: Transform.translate(offset: Offset(0, 140 * (1 - v)), child: child),
-                );
-              },
-              child: _FinishCard(
-                streak: _streak,
-                minutes: ((_baseDurationMs + _timer.elapsedMs(_now)) / 60000).ceil(),
-                onClose: _hideFinishCard,
+            child: ValueListenableBuilder<double>(
+              valueListenable: _pull,
+              // 上拉时卡片淡出，把底部让给「下一篇」提示。
+              builder: (context, pull, child) => Opacity(opacity: (1 - pull / 40).clamp(0.0, 1.0), child: child),
+              child: AnimatedBuilder(
+                animation: _finishCard,
+                builder: (context, child) {
+                  final v = _finishCard.value;
+                  if (v <= 0.001) return const SizedBox.shrink();
+                  return Opacity(
+                    opacity: v.clamp(0.0, 1.0),
+                    child: Transform.translate(offset: Offset(0, 140 * (1 - v)), child: child),
+                  );
+                },
+                child: _FinishCard(
+                  streak: _streak,
+                  minutes: ((_baseDurationMs + _timer.elapsedMs(_now)) / 60000).ceil(),
+                  onClose: _hideFinishCard,
+                ),
               ),
             ),
           ),
@@ -998,6 +1114,110 @@ class _ReaderPageState extends State<ReaderPage> with TickerProviderStateMixin, 
           Positioned.fill(child: ConfettiOverlay(controller: _confetti)),
         ],
       ),
+    );
+  }
+
+  /// 上拉过量即进入下一篇。
+  ///
+  /// 松手时机的判定：拖动中的 ScrollUpdate 带有 dragDetails；松手后 Flutter 先做回弹，
+  /// 回弹的通知没有 dragDetails。所以「第一个不带 dragDetails 的通知」就是松手时刻，
+  /// 此时用拖动中记录的最大过量距离判断是否切换。（不能等 UserScrollNotification：
+  /// 它要等回弹结束才到，那时过量距离已经归零。）
+  bool _onPullNotification(ScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+    if (n is UserScrollNotification) return false;
+    final over = n.metrics.pixels - n.metrics.maxScrollExtent;
+    final v = over > 0 ? over : 0.0;
+    if (v != _pull.value) _pull.value = v;
+    if (v >= _pullTrigger && !_pullHapticFired) {
+      _pullHapticFired = true;
+      unawaited(HapticFeedback.mediumImpact());
+    }
+    if (v < _pullTrigger * 0.5) _pullHapticFired = false;
+
+    if (n is ScrollStartNotification && n.dragDetails != null) {
+      _dragBeganAtEnd = n.metrics.pixels >= n.metrics.maxScrollExtent - 1;
+      _dragPull = 0;
+    } else if (n is ScrollUpdateNotification && n.dragDetails != null) {
+      _dragging = true;
+      _dragPull = v;
+    } else if (_dragging) {
+      _dragging = false;
+      if (_dragBeganAtEnd && _dragPull >= _pullTrigger && _next != null && !_navigating) _openNext();
+      _dragPull = 0;
+      _dragBeganAtEnd = false;
+    }
+    return false;
+  }
+
+  /// 切换到下一篇。滚动通知在布局阶段分发，此时不能直接切页，推迟到本帧结束后执行。
+  void _openNext() {
+    final next = _next;
+    if (next == null) return;
+    _navigating = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(ReaderPage.routeUp(summary: next, source: 'next'));
+    });
+  }
+
+  /// 底部上拉提示：随拉动距离展开，过阈值后文案变为「松手」。
+  Widget _buildPullIndicator(AppPalette p, S s, MediaQueryData media) {
+    final next = _next;
+    return ValueListenableBuilder<double>(
+      valueListenable: _pull,
+      builder: (context, pull, _) {
+        final visual = math.min(pull * 0.6, 112.0);
+        if (next == null || visual <= 0) return const SizedBox.shrink();
+        final triggered = pull >= _pullTrigger;
+        return ClipRect(
+          child: SizedBox(
+            height: visual,
+            width: double.infinity,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              // 内容按自然高度排版、贴底；露出的高度由外层 SizedBox + ClipRect 决定。
+              child: OverflowBox(
+                alignment: Alignment.bottomCenter,
+                minHeight: 0,
+                maxHeight: double.infinity,
+                child: Opacity(
+                  opacity: math.min(visual / 50, 1.0),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(24, 10, 24, media.padding.bottom + 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: Motion.quick,
+                          child: Text(
+                            triggered ? s.releaseToNext : s.pullToNext,
+                            key: ValueKey(triggered),
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: p.accent),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          next.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: kReadingFont,
+                            fontFamilyFallback: kReadingFontFallback,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: p.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

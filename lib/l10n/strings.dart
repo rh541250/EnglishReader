@@ -85,6 +85,9 @@ abstract class S {
   // ---- 底部导航 ----
   String get tabRead;
   String get tabNotebook;
+  String get pullToNext;
+  String get releaseToNext;
+  String get notebookPlusOne;
   String get tabMe;
 
   // ---- 文章列表 ----
@@ -249,6 +252,12 @@ class SZh extends S {
   String get tabRead => '阅读';
   @override
   String get tabNotebook => '笔记';
+  @override
+  String get pullToNext => '继续上拉，阅读下一篇';
+  @override
+  String get releaseToNext => '松手，阅读下一篇';
+  @override
+  String get notebookPlusOne => '笔记 +1';
   @override
   String get tabMe => '我的';
 
@@ -478,6 +487,12 @@ class SEn extends S {
   String get tabRead => 'Read';
   @override
   String get tabNotebook => 'Notebook';
+  @override
+  String get pullToNext => 'Keep pulling to read the next';
+  @override
+  String get releaseToNext => 'Release to read the next';
+  @override
+  String get notebookPlusOne => 'Notebook +1';
   @override
   String get tabMe => 'Me';
 

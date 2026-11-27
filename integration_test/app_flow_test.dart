@@ -219,6 +219,28 @@ void main() {
     expect(await app.articles.continueReading(uid), isNull, reason: '读完后不应再出现在「继续阅读」');
     await shot(tester, '12_finish_card');
 
+    // ---- 上拉进入下一篇：先滑到底，再继续拖动越过阈值 ----
+    final finishedId = tester.widget<ReaderPage>(find.byType(ReaderPage)).summary.id;
+    // 直接滚到底部（不用甩动，甩动不应算作上拉）。
+    final endScroll = readerScroll(tester);
+    endScroll.jumpTo(endScroll.position.maxScrollExtent);
+    await wait(tester, 400);
+    final pull = await tester.startGesture(tester.getCenter(find.byType(SingleChildScrollView).last));
+    for (var i = 0; i < 24; i++) {
+      await pull.moveBy(const Offset(0, -16));
+      await wait(tester, 16);
+    }
+    await shot(tester, '18_pull_next_hint');
+    await pull.up();
+    await wait(tester, 1200);
+    expect(tester.widget<ReaderPage>(find.byType(ReaderPage)).summary.id, isNot(finishedId), reason: '上拉越过阈值后应进入下一篇');
+    await shot(tester, '19_next_article');
+    await app.analytics.idle;
+    final nextOpened = await app.db.rawQuery(
+      "SELECT COUNT(*) AS n FROM event_queue WHERE name = 'article_open' AND json_extract(payload_json, '\$.props.source') = 'next'",
+    );
+    expect(nextOpened.first['n'], greaterThan(0), reason: '应有一次 source=next 的文章打开埋点');
+
     // 返回列表
     Navigator.of(tester.element(find.byType(ReaderPage))).pop();
     await wait(tester, 1000);
